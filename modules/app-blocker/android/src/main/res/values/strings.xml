@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_blocker_service_label">Mind-Muscle Sync blocker</string>
+    <string name="mms_overlay_pay">PAY TOLL</string>
+    <string name="mms_overlay_pay_hint">Quick puzzles or a few reps unlock more time</string>
+    <string name="mms_overlay_break">TAKE A BREAK</string>
+    <string name="app_blocker_service_description">Mind-Muscle Sync uses this only to know which app is open, so it can pause the apps you chose once you pass your daily limit. It does not read what is on your screen, what you type, or any personal data.</string>
+</resources>

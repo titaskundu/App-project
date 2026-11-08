@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bottom sheet: warm white with big rounded top corners. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FAF7F2" />
+    <corners android:topLeftRadius="32dp" android:topRightRadius="32dp" />
+</shape>

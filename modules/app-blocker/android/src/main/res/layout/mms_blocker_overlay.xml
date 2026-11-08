@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The popup drawn over a blocked app. Full-screen dim layer (blocks taps on the app behind)
+  with a bottom sheet card. Colors and font match src/theme/tokens.ts.
+-->
+<expo.modules.appblocker.OverlayRootView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mms_overlay_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#B31F2340"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:id="@+id/mms_overlay_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="@drawable/mms_overlay_card"
+        android:clickable="true"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingTop="28dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="48dp">
+
+        <TextView
+            android:layout_width="88dp"
+            android:layout_height="88dp"
+            android:background="@drawable/mms_mascot_circle"
+            android:gravity="center"
+            android:importantForAccessibility="no"
+            android:text="🐼"
+            android:textSize="40sp" />
+
+        <TextView
+            android:id="@+id/mms_overlay_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:fontFamily="@font/nunito_black"
+            android:gravity="center"
+            android:textColor="#1F2340"
+            android:textSize="28sp" />
+
+        <TextView
+            android:id="@+id/mms_overlay_sub"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/nunito_semibold"
+            android:gravity="center"
+            android:textColor="#6B6F86"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/mms_overlay_line"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/mms_bubble"
+            android:fontFamily="@font/nunito_extrabold"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp"
+            android:padding="18dp"
+            android:textColor="#1F2340"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/mms_overlay_pay"
+            android:layout_width="match_parent"
+            android:layout_height="69dp"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/mms_btn_primary"
+            android:fontFamily="@font/nunito_extrabold"
+            android:gravity="center"
+            android:letterSpacing="0.08"
+            android:paddingBottom="5dp"
+            android:text="@string/mms_overlay_pay"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:fontFamily="@font/nunito_semibold"
+            android:text="@string/mms_overlay_pay_hint"
+            android:textColor="#6B6F86"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/mms_overlay_break"
+            android:layout_width="match_parent"
+            android:layout_height="61dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/mms_btn_neutral"
+            android:fontFamily="@font/nunito_extrabold"
+            android:gravity="center"
+            android:letterSpacing="0.08"
+            android:paddingBottom="5dp"
+            android:text="@string/mms_overlay_break"
+            android:textColor="#4F46E5"
+            android:textSize="16sp" />
+    </LinearLayout>
+</expo.modules.appblocker.OverlayRootView>
