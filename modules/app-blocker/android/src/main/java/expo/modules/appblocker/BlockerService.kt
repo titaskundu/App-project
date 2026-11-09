@@ -3,6 +3,8 @@ package expo.modules.appblocker
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -68,6 +70,14 @@ class BlockerService : AccessibilityService() {
   private var leftInShortPkg: String? = null
   private var lastPipExpand = 0L
 
+  /**
+   * "Pay toll" was tapped for this app at [tollAt]. Our Toll screen can take a few seconds to
+   * open, and until it does the blocked app is still in front; without this grace period the next
+   * tick would show the popup again, on top of the Toll screen. Ends when our app is in front.
+   */
+  private var tollPkg: String? = null
+  private var tollAt = 0L
+
   /** Windows from these packages don't count as "switching apps" (status bar, keyboards). */
   private val ignored = mutableSetOf("com.android.systemui")
 
@@ -93,7 +103,7 @@ class BlockerService : AccessibilityService() {
     // Popup buttons are tapped on the main thread; hand the work to the blocker's thread.
     overlay = BlockerOverlay(
       this,
-      onPayToll = { pkg, scope -> bg.post { openToll(pkg, scope) } },
+      onPayToll = { pkg, scope -> bg.post { tollPkg = pkg; tollAt = SystemClock.elapsedRealtime(); openToll(pkg, scope) } },
       onTakeBreak = { pkg, leaveWithBack -> bg.post { takeBreak(pkg, leaveWithBack) } },
     )
     bg.post {
@@ -133,19 +143,34 @@ class BlockerService : AccessibilityService() {
    * app owns the active window and treat a difference as a switch.
    */
   private fun syncForegroundApp() {
-    val pkg = try { rootInActiveWindow?.packageName?.toString() } catch (_: Exception) { null } ?: return
+    val pkg = activePkg() ?: return
     if (pkg == currentPkg || pkg in ignored) return
     if (pkg == packageName && overlay.isShowing) return // that's our popup, not a switch
     Log.d(TAG, "foreground app: $pkg (was $currentPkg)")
     onWindowChanged(pkg)
   }
 
+  /** Package of the app that owns the active window, or null if Android can't tell us. */
+  private fun activePkg(): String? =
+    try { rootInActiveWindow?.packageName?.toString() } catch (_: Exception) { null }
+
   private fun onWindowChanged(pkg: String) {
     if (pkg in ignored) return
     // Our own popup also fires window events; they don't mean the user switched apps.
     if (pkg == packageName && overlay.isShowing) return
+    // Some apps send window events from windows that aren't in front (Samsung's Google Discover
+    // panel, Samsung Pay hints). Only switch if that app really owns the active window; if Android
+    // is just slow to update, the re-check shortly after catches the real switch.
+    if (pkg != packageName && pkg != currentPkg) {
+      val active = activePkg()
+      if (active != null && active != pkg) {
+        bg.postDelayed({ syncForegroundApp() }, WINDOW_SETTLE_MS)
+        return
+      }
+    }
 
     flush() // credit time to the app (and viewer state) we're leaving
+    if (pkg == packageName) tollPkg = null // our Toll screen opened; the grace period is over
     if (pkg != currentPkg) {
       // Remember an app left while its Reels/Shorts viewer was open: it may keep playing in a
       // floating window. Only that same app leaving normally clears it (Samsung briefly reports
@@ -170,8 +195,15 @@ class BlockerService : AccessibilityService() {
    */
   private fun onScrolled(pkg: String, event: AccessibilityEvent) {
     if (pkg != currentPkg || !inShort || overlay.isShowing) return
+    // "Leave Reels" taps the Home tab, which itself scrolls; that isn't a reel watched.
+    if (pkg == breakPkg && SystemClock.elapsedRealtime() - breakAt < BREAK_COOLDOWN_MS) return
     val rule = ShortFormRules.forPkg(pkg) ?: return
-    if (rule.pageId != null) return // this app is counted by page change in detect()
+    if (rule.pageId != null) {
+      // Counted by page change: check which reel is on screen once the swipe has settled.
+      bg.removeCallbacks(pageCheck)
+      bg.postDelayed(pageCheck, PAGE_SETTLE_MS)
+      return
+    }
     if (!BlockerStore.isTracked(this, pkg)) return
 
     // When the viewer was found by ID, only count scrolls of that viewer (not e.g. a comments sheet).
@@ -187,6 +219,10 @@ class BlockerService : AccessibilityService() {
       BlockerStore.addCount(this, BlockerStore.shortScope(pkg))
       Log.d(TAG, "$pkg ${rule.feedName}: swipe counted")
     }
+  }
+
+  private val pageCheck = Runnable {
+    currentPkg?.let { if (inShort && !overlay.isShowing) detect(it) }
   }
 
   private fun takeBreak(pkg: String, leaveWithBack: Boolean) {
@@ -296,6 +332,18 @@ class BlockerService : AccessibilityService() {
     }
   }
 
+  /**
+   * Is the app in front our own app or another limited app? Android only tells us that *some*
+   * sound is playing, not which app makes it, so while such an app is in front (Facebook Reels
+   * playing, our Toll screen) a paused floating window would look like it's playing. In that case
+   * the floating window is neither counted nor reopened. Exact per-app playback would need the
+   * "Notification access" permission (possible later).
+   */
+  private fun frontAppIsWatched(): Boolean {
+    val cur = currentPkg ?: return false
+    return cur == packageName || BlockerStore.isTracked(this, cur)
+  }
+
   /** A floating window only uses up time while it's actually playing (sound is on). */
   private fun floatingIsPlaying(): Boolean =
     (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.isMusicActive == true
@@ -326,7 +374,7 @@ class BlockerService : AccessibilityService() {
     }
 
     val pip = pipPkg
-    if (pip != null && floatingIsPlaying()) {
+    if (pip != null && floatingIsPlaying() && !frontAppIsWatched()) {
       BlockerStore.addUsage(this, pip, ms)
       if (pipInShort) BlockerStore.addUsage(this, BlockerStore.shortScope(pip), ms)
     }
@@ -346,6 +394,7 @@ class BlockerService : AccessibilityService() {
     }
     val now = SystemClock.elapsedRealtime()
     if (now - lastShown < RESHOW_GAP_MS) return
+    if (pkg == tollPkg && now - tollAt < TOLL_OPEN_GRACE_MS) return // Toll screen is opening
     // Apps can send a late "window opened" event right after the user chose "Take a break";
     // don't let that pop the overlay straight back up.
     if (pkg == breakPkg && now - breakAt < BREAK_COOLDOWN_MS) return
@@ -360,6 +409,18 @@ class BlockerService : AccessibilityService() {
   private fun enforceFloatingWindow() {
     val pip = pipPkg ?: return
     if (overlay.isShowing || !floatingIsPlaying()) return
+    // Never pull the user away from our own screens (paying a toll) or from another limited app.
+    if (frontAppIsWatched()) return
+    val now0 = SystemClock.elapsedRealtime()
+    if (pip == tollPkg && now0 - tollAt < TOLL_OPEN_GRACE_MS) return
+    // The user just chose "Take a break" / "Leave Reels" and the app shrank into a floating
+    // window by itself (YouTube does this when you leave it). Reopening it would trap them in a
+    // loop, so pause the video instead; if they press play again later, the normal rule applies.
+    if (pip == breakPkg && now0 - breakAt < PIP_AFTER_BREAK_MS) {
+      Log.d(TAG, "$pip: floating window right after a break; pausing it")
+      pauseMedia()
+      return
+    }
     val over = BlockerStore.isOverLimit(this, pip) ||
       (pipInShort && BlockerStore.isOverLimit(this, BlockerStore.shortScope(pip)))
     if (!over) return
@@ -372,6 +433,26 @@ class BlockerService : AccessibilityService() {
       startActivity(intent)
     } catch (_: Exception) {
     }
+  }
+
+  /**
+   * Pauses whatever video/music is playing: taking full audio focus tells media apps to stop,
+   * and they don't resume when we hand it back a moment later.
+   */
+  private fun pauseMedia() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+    val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+      .setAudioAttributes(
+        AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_MEDIA)
+          .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+          .build()
+      )
+      .setOnAudioFocusChangeListener { }
+      .build()
+    am.requestAudioFocus(req)
+    bg.postDelayed({ am.abandonAudioFocusRequest(req) }, 500)
   }
 
   private fun openToll(pkg: String, scope: String) {
@@ -419,6 +500,9 @@ class BlockerService : AccessibilityService() {
     const val SWIPE_GAP_MS = 700L
     const val ESCAPE_CHECK_MS = 700L
     const val WINDOW_SETTLE_MS = 250L
+    const val PAGE_SETTLE_MS = 800L
+    const val TOLL_OPEN_GRACE_MS = 10_000L
+    const val PIP_AFTER_BREAK_MS = 30_000L
     const val PIP_EXPAND_GAP_MS = 10_000L
     /** Filter logs with: adb logcat -s MmsBlocker */
     const val TAG = "MmsBlocker"

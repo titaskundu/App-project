@@ -1,5 +1,7 @@
 package expo.modules.appblocker
 
+import android.content.res.Resources
+import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
 
 /**
@@ -32,8 +34,9 @@ data class ShortFormRule(
   val exitTabLabels: List<String> = emptyList(),
   /**
    * The container each reel/short sits in. When set, swipes are counted by noticing that a
-   * different container is on screen (checked every tick) instead of from scroll events.
-   * Needed for YouTube, whose swipes don't send scroll events to services like ours.
+   * different container is on screen (checked every tick, and shortly after any scroll)
+   * instead of counting scroll bursts. Needed for YouTube (its swipes send us no scroll
+   * events) and more accurate for Instagram (which sends extra scrolls from inside a reel).
    */
   val pageId: String? = null,
 )
@@ -48,6 +51,9 @@ object ShortFormRules {
       selectedTabLabels = listOf("Reels"),
       exitTabId = "com.instagram.android:id/feed_tab",
       exitTabLabels = listOf("Home"),
+      // Each reel's own container. Counting by page change avoids extra scroll signals from
+      // inside a reel (Instagram over-counted with scroll bursts).
+      pageId = "com.instagram.android:id/clips_media_component",
     ),
     ShortFormRule(
       pkg = "com.google.android.youtube",
@@ -123,11 +129,21 @@ object ShortFormRules {
     return null
   }
 
-  /** The reel/short container currently on screen (see [ShortFormRule.pageId]), or null. */
+  /**
+   * The reel/short container that fills most of the screen (see [ShortFormRule.pageId]), or null.
+   * Right after a swipe a sliver of the previous reel can still count as "visible", so we pick
+   * the one with the largest on-screen area rather than the first one found.
+   */
   fun visiblePage(rule: ShortFormRule, root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
     val id = rule.pageId ?: return null
+    val screen = Resources.getSystem().displayMetrics.let { Rect(0, 0, it.widthPixels, it.heightPixels) }
+    val bounds = Rect()
     return try { root.findAccessibilityNodeInfosByViewId(id) } catch (_: Exception) { emptyList() }
-      .firstOrNull { it.refresh() && it.isVisibleToUser }
+      .filter { it.refresh() && it.isVisibleToUser }
+      .maxByOrNull { node ->
+        node.getBoundsInScreen(bounds)
+        if (bounds.intersect(screen)) bounds.width() * bounds.height() else 0
+      }
   }
 
   /** Taps the rule's Home tab. Returns false if it isn't on screen or can't be tapped. */
