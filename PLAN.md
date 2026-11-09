@@ -147,6 +147,12 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 - Stats: skill radar (one axis per area you picked, with subskills on tap), coach tip, form score, weekly volume, 30-day heatmap, Hours Reclaimed.
 - Full onboarding and permission flow, sounds and vibration, empty states.
 - Home: **reactive mascot** (moods + speech bubble driven by limits, tolls and time of day) and the **reclaimed-time translator**.
+- **Blocker battery pass (decided 2026-11-09).** Today the blocker checks every 2 s; the cost is small but unmeasured. Measure first (reset battery stats, use the phone normally for a few hours, read the app's share in Settings → Battery / `adb shell dumpsys batterystats`), then:
+  1. Slow down or pause the 2 s check when no limited app and no floating video window is on screen; wake it on the next app switch.
+  2. Stop the check completely while the screen is off (it already skips counting then) and resume when it turns on.
+  3. Keep today's minutes in memory and save them every 10–20 s (and on app switch / screen off) instead of every tick.
+  4. Run the Facebook tab-label scan less often (e.g. every 4 s); ID lookups for Instagram/YouTube stay at 2 s.
+  Measure again afterwards. Blocking behavior must not change; re-run the Phase 1.5 device checks.
 
 ### After launch (not in v1)
 - **Strict Mode (optional, decided 2026-11-08):** uses Android Device Admin so the app's Force stop and Uninstall buttons are greyed out while it's on. Needs a Google Play policy check first. In v1, Force stop is handled by clearly showing "Blocking is off" on Home and in Settings.
@@ -155,6 +161,7 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 ### Phase 7 — Launch on Google Play
 - Privacy policy (free GitHub Pages site), Data safety form (the camera runs only on the phone, nothing is uploaded), Accessibility declaration + video, store listing.
 - **New personal Play accounts must run a closed test with at least 12 testers for 14 days before going public.** Line up testers early, around Phase 5.
+- During the closed test, check the blocker's battery use on a few testers' phones (different brands, especially Samsung and Xiaomi) and in Play Console's Android vitals.
 
 ---
 
@@ -182,7 +189,22 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 ---
 
 ## Current status (2026-11-08)
-**Phase 1 — ✅ built and tested on the emulator (2026-11-08), awaiting your review.**
+**Phase 1.5 — ✅ built and tested on a real phone (2026-11-09), awaiting your review.** Test phone: Galaxy S23 (SM-S911B, Android 16), with Instagram, YouTube and Facebook.
+- Built: per-scope tracking (`pkg` / `pkg:short`), `ShortFormRules.kt` (IDs → tab labels, prefix match), reel counting (scroll bursts for Instagram/Facebook, page change for YouTube), Reels popup mode with **Leave Reels/Shorts**, floating-window (picture-in-picture) counting and blocking, safety net (3 h without a match → whole app counts against the Reels limit), two optional limits per app in Settings, Reels/Shorts bars + counts on Home, scope-aware Toll screen, new disclosure text, 6 new unit tests (12 total). The blocker's logic now runs on its own background thread.
+- Verified on the phone:
+  - Instagram: ✅ Reels detected by `clips_viewer_view_pager`, Home feed not counted; ✅ swipes counted; ✅ popup only inside Reels; ✅ Leave Reels taps `feed_tab` and stays in Instagram (also when Reels was the first screen).
+  - YouTube: ✅ Shorts detected (`reel_recycler` etc.); ✅ 3 swipes → 3 counted (page change); ✅ popup + Leave Shorts (Back) → YouTube Home; ✅ Pay toll → Toll screen → +5 min on `youtube:short` only; ✅ whole-app limit popup → Take a break → phone home screen; ✅ floating window keeps counting while it plays (+8.2 s in 8 s); ✅ over the limit while floating → YouTube reopened full screen with the Shorts popup.
+  - Facebook: ✅ Reels detected by the selected tab label "Reels, tab 2 of 6"; ✅ 3 swipes counted; ✅ popup "1 min on Facebook Reels · 6 reels today"; ✅ Leave Reels taps "Home, tab 1 of 6" and stays in Facebook.
+  - ✅ Going Home stops the counting (Samsung doesn't always send a window event; the service now re-checks the active window every tick).
+  - ✅ tsc, eslint, 12 Jest tests pass.
+- Fixed during testing: stale accessibility tree (`refresh()`); already-open app after restart and missed Home switches (re-check the active window every tick); YouTube swipes send no scroll events (count by page container); Facebook labels carry extra text (prefix match); Leave Reels tapped before the app's window was active (250 ms settle, Home tab first); **invisible popup on Samsung** (it pauses animations for background apps, so the fade-in never ran: the popup now starts visible and a timer snaps the slide into place); first YouTube check froze our main thread ~1.4 s (all blocker work moved to a background thread); "ADD LIMIT" / "Turn off" labels clipped.
+- Known limits:
+  - Facebook Reels opened full-screen from the News Feed (not the Reels tab) isn't recognised: Facebook hides its IDs, so only the Reels tab is detectable. Revisit with remote rules (Phase 4).
+  - A floating window only counts while sound is playing (so a paused one is free); a muted-but-playing video in a floating window isn't counted.
+  - Dev only: re-toggle the service after each `adb install -r` (it's marked "crashed"); debug builds need Metro to show our screens.
+- Testing notes: `uiautomator dump` pauses other Accessibility services (restarts the blocker). Old Metro processes hold ports 8081/8082; current Metro runs on 8083 (`adb reverse tcp:8081 tcp:8083`).
+
+**Phase 1 — ✅ built and tested on the emulator (2026-11-08); approved (Phase 1.5 started).**
 - Built: native blocker module (Accessibility watcher, per-app daily timers, toll grants, deep link to the Toll screen); Settings (permission explainer + status, blocked apps with limit stepper); app picker; plain Toll screen with a test toll (+5 min); live **Today's apps** card on Home; unit tests for limit logic.
 - Tested (YouTube and Chrome as targets, 1-minute limits): ✅ blocked after ~62 s; ✅ reopening a blocked app brings the Toll screen straight back; ✅ paying the toll adds 5 min and the app stays open; ✅ survives swiping the app away from Recents; ✅ survives a phone reboot (usage carries over, still blocked).
 - ⚠️ Found: **Force stop** (Settings → Apps → Force stop) makes Android switch the blocker off until the user turns it back on. This is standard Android behavior for all Accessibility apps. Decision: v1 shows "Blocking is off" clearly; an optional Device Admin "Strict Mode" comes after launch.

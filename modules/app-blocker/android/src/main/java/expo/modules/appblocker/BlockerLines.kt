@@ -29,6 +29,12 @@ object BlockerLines {
     return lines[i].replace("{time}", time).replace("{app}", app)
   }
 
+  /** "1 reel", "47 reels", "3 shorts" (feedName is "Reels" or "Shorts"). */
+  fun countLabel(n: Int, feedName: String): String {
+    val plural = feedName.lowercase()
+    return if (n == 1) "1 ${plural.removeSuffix("s")}" else "$n $plural"
+  }
+
   /** "45 sec", "12 min", "1h 05m" */
   fun formatDuration(ms: Long): String {
     val totalSec = (ms / 1000).coerceAtLeast(0)

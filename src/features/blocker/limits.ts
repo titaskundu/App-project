@@ -46,3 +46,54 @@ export const SUGGESTED_PACKAGES = [
   'in.mohalla.sharechat',
   'com.netflix.mediaclient',
 ];
+
+// ---- scopes: whole app vs Reels/Shorts --------------------------------------
+
+const SHORT_SUFFIX = ':short';
+
+/** "com.instagram.android" → "com.instagram.android:short" (its Reels/Shorts limit). */
+export function shortScope(pkg: string): string {
+  return pkg + SHORT_SUFFIX;
+}
+
+export function isShortScope(scope: string): boolean {
+  return scope.endsWith(SHORT_SUFFIX);
+}
+
+/** The app a scope belongs to. */
+export function scopePkg(scope: string): string {
+  return isShortScope(scope) ? scope.slice(0, -SHORT_SUFFIX.length) : scope;
+}
+
+/** Apps with any limit, in the order they were added, without duplicates. */
+export function trackedPackages(targets: Record<string, number>): string[] {
+  return [...new Set(Object.keys(targets).map(scopePkg))];
+}
+
+/**
+ * New targets after the user saves the app picker.
+ * - Apps kept: keep all their limits.
+ * - New apps: Reels/Shorts limit for apps that support it (the point of tracking them),
+ *   whole-app limit for everything else.
+ * - Apps no longer picked: all their limits removed.
+ */
+export function targetsForPicked(
+  current: Record<string, number>,
+  picked: string[],
+  shortFormApps: Record<string, string>
+): Record<string, number> {
+  const next: Record<string, number> = {};
+  for (const pkg of picked) {
+    const short = shortScope(pkg);
+    const had = current[pkg] !== undefined || current[short] !== undefined;
+    if (had) {
+      if (current[pkg] !== undefined) next[pkg] = current[pkg];
+      if (current[short] !== undefined) next[short] = current[short];
+    } else if (shortFormApps[pkg]) {
+      next[short] = DEFAULT_LIMIT;
+    } else {
+      next[pkg] = DEFAULT_LIMIT;
+    }
+  }
+  return next;
+}

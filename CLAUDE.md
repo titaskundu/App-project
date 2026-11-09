@@ -16,9 +16,12 @@ Android-first Expo (SDK 58) app that blocks distracting apps past a daily limit.
 - `src/features/<feature>/` holds feature logic (brain, muscle, economy…), keeping pure logic separate from UI so it can be unit-tested.
 - `src/theme/tokens.ts` is the **only** place colors, fonts, spacing and radii are defined.
 - `modules/app-blocker/` is the native blocker (Kotlin, classic Expo Modules API, not the new v2 annotation API). Import it as `@modules/app-blocker`.
-  - `BlockerService.kt`: Accessibility service (window-change events only), 2s ticker. When an app is over its limit it shows `BlockerOverlay` on top of it; "Pay toll" opens `mindmusclesync://toll?pkg=…`. The scheme is hard-coded there and must match `scheme` in app.json.
-  - `BlockerOverlay.kt` + `res/layout/mms_blocker_overlay.xml`: native popup (TYPE_ACCESSIBILITY_OVERLAY, no extra permission), styled with the same tokens and bundled Nunito fonts (`res/font`). Funny lines live in `BlockerLines.kt`.
-  - `BlockerStore.kt`: SharedPreferences `mms_app_blocker` (targets, daily usage/extra/tolls; resets at local midnight). Native is the source of truth; JS reads and writes through it.
+  - `BlockerService.kt`: Accessibility service (window-change + scroll events), 2s ticker. All logic runs on its own `HandlerThread`; the main thread only copies events across. Every tick it re-checks the active window's app (Samsung skips some window events) and looks for a tracked app in a floating (PiP) window, counted only while audio plays and reopened full screen when over its limit. When an app is over its limit it shows `BlockerOverlay` on top of it; "Pay toll" opens `mindmusclesync://toll?pkg=…`. The scheme is hard-coded there and must match `scheme` in app.json.
+  - `BlockerOverlay.kt` + `res/layout/mms_blocker_overlay.xml`: native popup (TYPE_ACCESSIBILITY_OVERLAY, no extra permission), styled with the same tokens and bundled Nunito fonts (`res/font`). Funny lines live in `BlockerLines.kt`. `show`/`hide` are thread-safe and do view work on the main thread. Never make the popup depend on an animation: Samsung pauses animations for background apps, so a fade from transparent left it invisible.
+  - `BlockerStore.kt`: SharedPreferences `mms_app_blocker` (targets, daily usage/extra/tolls/counts; resets at local midnight; plus rule `health`). Native is the source of truth; JS reads and writes through it.
+  - Everything is keyed by **scope**: `pkg` = whole app, `pkg:short` = its Reels/Shorts viewer only. Whole-app usage includes Reels time.
+  - `ShortFormRules.kt`: per-app rules (layout IDs, then selected-tab labels as fallback; labels match exactly or as a prefix before a comma, e.g. Facebook's "Reels, tab 2 of 6") that tell whether the Reels/Shorts viewer is open. Only IDs and labels are read, never text. Swipes are counted from scroll bursts (Instagram) or, when a rule has `pageId`, by the visible page container changing (YouTube sends us no scroll events). A Reels limit's popup says "Leave Reels": tap the app's Home tab (`exitTabId`) if visible, else Back, then Back, then phone home. A whole-app popup goes Home. Safety net: 3 h of app use without a match marks the rules stale and counts the whole app against the Reels limit.
+  - Inspect a screen's IDs on a device with `adb shell uiautomator dump /sdcard/ui.xml` then `adb pull /sdcard/ui.xml`.
   - Complex values cross the bridge as JSON strings.
 - `src/features/blocker/`: Zustand store, `useLiveBlocker` polling hook, pure helpers in `limits.ts` (unit-tested), UI cards.
 - Tests: `npx jest` (pure logic only, in `__tests__` folders). Import `describe/it/expect` from `@jest/globals` (TypeScript 6 doesn't load Jest's global types automatically).
@@ -32,8 +35,9 @@ Android-first Expo (SDK 58) app that blocks distracting apps past a daily limit.
 - JDK 17 is at `C:\Program Files\Microsoft\jdk-17.0.21.21-hotspot` (the system's default Java 27 is too new for Android builds).
 - Emulator dev build: `cd android && .\gradlew.bat assembleDebug -PreactNativeArchitectures=x86_64`. Drop the flag for real-phone builds.
 - After an emulator reboot, run `adb reverse tcp:8081 tcp:8081` again, or debug builds show a black screen.
-- Test hooks: enable the blocker with `adb shell settings put secure enabled_accessibility_services com.mindmusclesync.app/expo.modules.appblocker.BlockerService`; read saved state with `adb shell run-as com.mindmusclesync.app cat shared_prefs/mms_app_blocker.xml`.
+- Test hooks: enable the blocker with `adb shell settings put secure enabled_accessibility_services com.mindmusclesync.app/expo.modules.appblocker.BlockerService` (**this replaces the whole list**. On the user's real phone, read the current value first and append ours with `:`); read saved state with `adb shell run-as com.mindmusclesync.app cat shared_prefs/mms_app_blocker.xml`.
 - Known: a **force stop** of the app makes Android disable the Accessibility service until the user re-enables it. Swipe-away and reboot are fine.
+- After `adb install -r` while the blocker is on, Android may list it under "Crashed services" and stop delivering events: delete and re-put `enabled_accessibility_services` after each install. Blocker logs: `adb logcat -s MmsBlocker`.
 
 ## Design rules
 - Feel: simple, chunky, bouncy, friendly (the Duolingo-like *feel*). **Do not** copy Duolingo's green palette or owl-style mascot.

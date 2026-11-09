@@ -6,14 +6,22 @@ import { Card } from '@/components/ui/Card';
 import { ChunkyButton } from '@/components/ui/ChunkyButton';
 import { colors, space } from '@/theme/tokens';
 
-import { allowanceMs } from '../limits';
-import { appLabel, useBlocker } from '../store';
+import { allowanceMs, isShortScope, shortScope, trackedPackages } from '../limits';
+import { scopeLabel, useBlocker } from '../store';
 import { UsageBar } from './UsageBar';
 
-/** Home card: live time used vs allowance for each blocked app. */
+/** Home card: live time used vs allowance for each limit (Reels limit first, then whole app). */
 export function TodayAppsCard() {
-  const { apps, targets, today, accessibilityOn } = useBlocker();
-  const pkgs = Object.keys(targets);
+  const { apps, targets, today, accessibilityOn, shortFormApps } = useBlocker();
+  const pkgs = trackedPackages(targets);
+  const scopes = pkgs.flatMap((pkg) => [shortScope(pkg), pkg].filter((s) => targets[s] !== undefined));
+
+  const label = (scope: string) => {
+    const name = scopeLabel(apps, shortFormApps, scope);
+    if (!isShortScope(scope)) return name;
+    const n = today?.counts[scope] ?? 0;
+    return n > 0 ? `${name} · ${n}` : name;
+  };
 
   if (pkgs.length === 0) {
     return (
@@ -36,12 +44,12 @@ export function TodayAppsCard() {
         )}
       </View>
       <View style={styles.list}>
-        {pkgs.map((pkg) => (
+        {scopes.map((scope) => (
           <UsageBar
-            key={pkg}
-            label={appLabel(apps, pkg)}
-            usedMs={today?.usage[pkg] ?? 0}
-            allowanceMs={allowanceMs(targets[pkg], today?.extra[pkg] ?? 0)}
+            key={scope}
+            label={label(scope)}
+            usedMs={today?.usage[scope] ?? 0}
+            allowanceMs={allowanceMs(targets[scope], today?.extra[scope] ?? 0)}
           />
         ))}
       </View>

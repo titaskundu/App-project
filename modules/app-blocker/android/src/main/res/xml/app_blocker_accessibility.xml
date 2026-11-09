@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only window-change events; we never read screen content. -->
+<!--
+  Window changes (which app is open) and scrolls (counting reels).
+  canRetrieveWindowContent + flagReportViewIds let us check layout IDs and tab labels to tell
+  whether a Reels/Shorts viewer is open. The service only does that for Instagram, YouTube and
+  Facebook (see ShortFormRules.kt) and never reads on-screen text.
+  flagRetrieveInteractiveWindows lets us notice a limited app playing in a floating
+  (picture-in-picture) window, so that time counts too.
+-->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeViewScrolled"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:canRetrieveWindowContent="false"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
     android:description="@string/app_blocker_service_description"
     android:isAccessibilityTool="false"
     android:notificationTimeout="100" />

@@ -7,26 +7,30 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
 import { ChunkyButton } from '@/components/ui/ChunkyButton';
-import { formatDuration, TOLL_MINUTES } from '@/features/blocker/limits';
-import { appLabel, useBlocker } from '@/features/blocker/store';
+import { formatDuration, isShortScope, TOLL_MINUTES } from '@/features/blocker/limits';
+import { scopeLabel, useBlocker } from '@/features/blocker/store';
 import { colors, radius, space } from '@/theme/tokens';
 import { AppBlocker } from '@modules/app-blocker';
 
 /**
- * The Toll screen, opened by the blocker (mindmusclesync://toll?pkg=...) when an app passes
- * its limit. Phase 1 uses a test toll button; Brain and Muscle tolls replace it in Phases 2–3.
+ * The Toll screen, opened by the blocker (mindmusclesync://toll?pkg=...&scope=...) when a limit
+ * is reached. scope is the app ("pkg") or its Reels/Shorts ("pkg:short").
+ * Phase 1 uses a test toll button; Brain and Muscle tolls replace it in Phases 2–3.
  */
 export default function TollScreen() {
-  const { pkg = '' } = useLocalSearchParams<{ pkg?: string }>();
-  const { apps, loadApps, refresh, today, targets } = useBlocker();
-  const name = appLabel(apps, pkg);
-  const used = today?.usage[pkg] ?? 0;
-  const tollsToday = today?.tolls[pkg] ?? 0;
+  const params = useLocalSearchParams<{ pkg?: string; scope?: string }>();
+  const pkg = params.pkg ?? '';
+  const scope = params.scope || pkg;
+  const { apps, loadApps, refresh, today, targets, shortFormApps } = useBlocker();
+  const name = scopeLabel(apps, shortFormApps, scope);
+  const used = today?.usage[scope] ?? 0;
+  const tollsToday = today?.tolls[scope] ?? 0;
+  const count = isShortScope(scope) ? (today?.counts[scope] ?? 0) : 0;
 
   useEffect(() => {
     refresh();
     loadApps().catch(() => {});
-  }, [refresh, loadApps, pkg]);
+  }, [refresh, loadApps, scope]);
 
   const leave = useCallback(() => {
     AppBlocker.goHome();
@@ -46,7 +50,7 @@ export default function TollScreen() {
   );
 
   const payTestToll = () => {
-    AppBlocker.grantMinutes(pkg, TOLL_MINUTES);
+    AppBlocker.grantMinutes(scope, TOLL_MINUTES);
     refresh();
     AppBlocker.openApp(pkg);
     if (router.canGoBack()) router.back();
@@ -65,7 +69,8 @@ export default function TollScreen() {
           </AppText>
           <AppText center color={colors.textMuted}>
             You&apos;ve used {formatDuration(used)} of {name} today
-            {targets[pkg] ? ` (limit ${targets[pkg]} min)` : ''}.
+            {count > 0 ? ` (${count} watched)` : ''}
+            {targets[scope] ? `. Your limit is ${targets[scope]} min.` : '.'}
           </AppText>
         </View>
       </View>

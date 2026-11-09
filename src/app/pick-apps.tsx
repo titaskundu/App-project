@@ -6,14 +6,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/ui/AppText';
 import { ChunkyButton } from '@/components/ui/ChunkyButton';
-import { SUGGESTED_PACKAGES } from '@/features/blocker/limits';
+import { SUGGESTED_PACKAGES, trackedPackages } from '@/features/blocker/limits';
 import { useBlocker } from '@/features/blocker/store';
 import { colors, fonts, radius, space } from '@/theme/tokens';
 
 /** Modal list of installed apps. Common distracting apps are listed first. */
 export default function PickAppsScreen() {
-  const { apps, appsLoaded, loadApps, targets, setTargetSet } = useBlocker();
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(Object.keys(targets)));
+  const { apps, appsLoaded, loadApps, targets, setTargetSet, shortFormApps } = useBlocker();
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(trackedPackages(targets)));
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -82,9 +82,16 @@ export default function PickAppsScreen() {
                     {item.label.charAt(0).toUpperCase()}
                   </AppText>
                 </View>
-                <AppText variant="bodyLg" numberOfLines={1} style={styles.flex}>
-                  {item.label}
-                </AppText>
+                <View style={styles.flex}>
+                  <AppText variant="bodyLg" numberOfLines={1}>
+                    {item.label}
+                  </AppText>
+                  {shortFormApps[item.packageName] && (
+                    <AppText variant="caption" color={colors.brainDark}>
+                      Can limit just {shortFormApps[item.packageName]}
+                    </AppText>
+                  )}
+                </View>
                 <Ionicons
                   name={on ? 'checkmark-circle' : 'ellipse-outline'}
                   size={26}

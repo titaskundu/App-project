@@ -4,5 +4,7 @@
     <string name="mms_overlay_pay">PAY TOLL</string>
     <string name="mms_overlay_pay_hint">Quick puzzles or a few reps unlock more time</string>
     <string name="mms_overlay_break">TAKE A BREAK</string>
-    <string name="app_blocker_service_description">Mind-Muscle Sync uses this only to know which app is open, so it can pause the apps you chose once you pass your daily limit. It does not read what is on your screen, what you type, or any personal data.</string>
+    <!-- %1$s = REELS or SHORTS -->
+    <string name="mms_overlay_leave">LEAVE %1$s</string>
+    <string name="app_blocker_service_description">Mind-Muscle Sync uses this to know which app is open and, for Instagram, YouTube and Facebook, which section is open (like Reels or Shorts), so it can pause what you chose once you pass your daily limit. It never reads your messages, what you type, or what is in posts or videos.</string>
 </resources>

@@ -8,14 +8,16 @@ import { ChunkyButton } from '@/components/ui/ChunkyButton';
 import { Screen } from '@/components/ui/Screen';
 import { AccessibilityCard } from '@/features/blocker/components/AccessibilityCard';
 import { LimitStepper } from '@/features/blocker/components/LimitStepper';
+import { ScopeLimitRow } from '@/features/blocker/components/ScopeLimitRow';
+import { shortScope, trackedPackages } from '@/features/blocker/limits';
 import { appLabel, useBlocker } from '@/features/blocker/store';
 import { useLiveBlocker } from '@/features/blocker/useLiveBlocker';
-import { colors, space } from '@/theme/tokens';
+import { colors, radius, space } from '@/theme/tokens';
 
 export default function SettingsScreen() {
   useLiveBlocker(4000);
-  const { apps, targets, accessibilityOn, setLimit, removeTarget } = useBlocker();
-  const pkgs = Object.keys(targets);
+  const { apps, targets, today, accessibilityOn, shortFormApps, setLimit, removeApp } = useBlocker();
+  const pkgs = trackedPackages(targets);
 
   return (
     <Screen>
@@ -26,7 +28,7 @@ export default function SettingsScreen() {
       <View style={styles.sectionHead}>
         <AppText variant="heading">Blocked apps</AppText>
         <AppText variant="caption" color={colors.textMuted}>
-          Daily limit per app
+          Daily limits
         </AppText>
       </View>
 
@@ -36,23 +38,61 @@ export default function SettingsScreen() {
         </Card>
       )}
 
-      {pkgs.map((pkg) => (
-        <Card key={pkg}>
-          <View style={styles.appRow}>
-            <AppText variant="bodyLg" numberOfLines={1} style={styles.flex}>
-              {appLabel(apps, pkg)}
-            </AppText>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Stop blocking ${appLabel(apps, pkg)}`}
-              hitSlop={12}
-              onPress={() => removeTarget(pkg)}>
-              <Ionicons name="close-circle" size={24} color={colors.textMuted} />
-            </Pressable>
-          </View>
-          <LimitStepper value={targets[pkg]} onChange={(m) => setLimit(pkg, m)} />
-        </Card>
-      ))}
+      {pkgs.map((pkg) => {
+        const name = appLabel(apps, pkg);
+        const feed = shortFormApps[pkg];
+        const short = shortScope(pkg);
+        const hasApp = targets[pkg] !== undefined;
+        const hasShort = targets[short] !== undefined;
+
+        return (
+          <Card key={pkg} style={styles.appCard}>
+            <View style={styles.appRow}>
+              <AppText variant="bodyLg" numberOfLines={1} style={styles.flex}>
+                {name}
+              </AppText>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Stop blocking ${name}`}
+                hitSlop={12}
+                onPress={() => removeApp(pkg)}>
+                <Ionicons name="close-circle" size={24} color={colors.textMuted} />
+              </Pressable>
+            </View>
+
+            {feed ? (
+              <>
+                <ScopeLimitRow
+                  title={`${feed} only`}
+                  hint={`Time in ${feed}. The rest of ${name} stays open.`}
+                  value={targets[short]}
+                  onChange={(m) => setLimit(short, m)}
+                  canTurnOff={hasApp}
+                />
+                <View style={styles.divider} />
+                <ScopeLimitRow
+                  title="Whole app"
+                  hint={`All time in ${name}, ${feed} included.`}
+                  value={targets[pkg]}
+                  onChange={(m) => setLimit(pkg, m)}
+                  canTurnOff={hasShort}
+                />
+                {today?.stale.includes(pkg) && hasShort && (
+                  <View style={styles.warning}>
+                    <Ionicons name="alert-circle" size={18} color={colors.muscleDark} />
+                    <AppText variant="caption" color={colors.muscleDark} style={styles.flex}>
+                      Can&apos;t spot {feed} right now (maybe after a {name} update). Counting all of {name}{' '}
+                      against your {feed} limit until it&apos;s fixed.
+                    </AppText>
+                  </View>
+                )}
+              </>
+            ) : (
+              <LimitStepper value={targets[pkg]} onChange={(m) => setLimit(pkg, m)} />
+            )}
+          </Card>
+        );
+      })}
 
       <ChunkyButton
         label={pkgs.length ? 'Add or remove apps' : 'Pick apps'}
@@ -66,6 +106,15 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: space.sm },
+  appCard: { gap: space.md },
   appRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   flex: { flex: 1 },
+  divider: { height: 2, backgroundColor: colors.surfaceMuted },
+  warning: {
+    flexDirection: 'row',
+    gap: space.sm,
+    padding: space.sm,
+    borderRadius: radius.sm,
+    backgroundColor: colors.muscleSoft,
+  },
 });

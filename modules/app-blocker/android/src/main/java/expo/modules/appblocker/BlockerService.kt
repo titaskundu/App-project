@@ -3,107 +3,380 @@ package expo.modules.appblocker
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
 import android.os.PowerManager
 import android.os.SystemClock
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.InputMethodManager
 
 /**
- * The watcher. Android tells it each time a different app's window comes to the front
- * (we only subscribe to window-change events and never read screen content).
+ * The watcher. Android tells it each time a different app's window comes to the front, and
+ * when something scrolls. Window content is only inspected for the short-video apps in
+ * [ShortFormRules], and only for layout IDs and tab labels (never text).
  *
- * Every TICK_MS it adds the elapsed time to today's total for the app on screen, if that
- * app is on the blocked list and the screen is on. When an app passes its limit, it shows
- * the popup (BlockerOverlay) right on top of that app:
- *  - "Pay toll"     → opens our Toll screen (mindmusclesync://toll?pkg=...)
- *  - "Take a break" → goes to the Android home screen
+ * Every TICK_MS it:
+ *  1. adds the elapsed time to today's totals for the app on screen (whole app, and its
+ *     Reels/Shorts scope if the viewer was open), plus a tracked app playing in a floating
+ *     (picture-in-picture) window;
+ *  2. re-checks whether the Reels/Shorts viewer is open;
+ *  3. shows the popup if a limit has been reached.
+ *
+ * Popup modes:
+ *  - whole-app limit → popup anywhere in the app; "Take a break" goes to the home screen.
+ *  - Reels limit     → popup only inside the viewer; "Leave Reels" taps the app's Home tab or
+ *                      presses Back, so the rest of the app stays usable.
+ *
+ * Threads: Android calls us on the app's main thread, which our own screens also use. Asking
+ * other apps about their screens can take a moment, so all of the work runs on a background
+ * thread ([bg]); the main thread only copies each event across. Fields below are touched only
+ * on [bg].
  *
  * Android restarts this service by itself after a reboot, as long as the user left it
  * turned on in Accessibility settings.
  */
 class BlockerService : AccessibilityService() {
 
-  private val handler = Handler(Looper.getMainLooper())
+  private lateinit var worker: HandlerThread
+  private lateinit var bg: Handler
+  private lateinit var overlay: BlockerOverlay
+
   private var currentPkg: String? = null
   private var lastTick = 0L
   private var lastShown = 0L
   private var breakPkg: String? = null
   private var breakAt = 0L
-  private lateinit var overlay: BlockerOverlay
+
+  /** Is the short-video viewer of [currentPkg] on screen (as of the last check)? */
+  private var inShort = false
+  /** Was it recognised by layout ID (true) or by tab label (false)? */
+  private var matchedById = false
+  private var lastScrollAt = 0L
+  /** The reel/short container seen at the last check, for apps counted by page change. */
+  private var lastPage: AccessibilityNodeInfo? = null
+
+  /** A tracked app shown in a floating window while another app is in front, if any. */
+  private var pipPkg: String? = null
+  /** Is that floating window showing Reels/Shorts? */
+  private var pipInShort = false
+  /** The app we last left while its Reels/Shorts viewer was open (floating windows keep playing it). */
+  private var leftInShortPkg: String? = null
+  private var lastPipExpand = 0L
 
   /** Windows from these packages don't count as "switching apps" (status bar, keyboards). */
   private val ignored = mutableSetOf("com.android.systemui")
 
   private val ticker = object : Runnable {
     override fun run() {
+      syncForegroundApp()
       flush()
-      currentPkg?.let { enforce(it) }
-      handler.postDelayed(this, TICK_MS)
+      checkFloatingWindow()
+      currentPkg?.let {
+        if (!overlay.isShowing) detect(it)
+        enforce(it)
+      }
+      enforceFloatingWindow()
+      bg.postDelayed(this, TICK_MS)
     }
   }
 
   override fun onServiceConnected() {
     super.onServiceConnected()
     running = true
-    overlay = BlockerOverlay(this, onPayToll = ::openToll, onTakeBreak = { pkg ->
-      breakPkg = pkg
-      breakAt = SystemClock.elapsedRealtime()
-      takeBreak()
-    })
-    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-    imm?.enabledInputMethodList?.forEach { ignored.add(it.packageName) }
-    lastTick = SystemClock.elapsedRealtime()
-    handler.removeCallbacks(ticker)
-    handler.postDelayed(ticker, TICK_MS)
+    worker = HandlerThread("MmsBlocker").apply { start() }
+    bg = Handler(worker.looper)
+    // Popup buttons are tapped on the main thread; hand the work to the blocker's thread.
+    overlay = BlockerOverlay(
+      this,
+      onPayToll = { pkg, scope -> bg.post { openToll(pkg, scope) } },
+      onTakeBreak = { pkg, leaveWithBack -> bg.post { takeBreak(pkg, leaveWithBack) } },
+    )
+    bg.post {
+      val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+      imm?.enabledInputMethodList?.forEach { ignored.add(it.packageName) }
+      lastTick = SystemClock.elapsedRealtime()
+      syncForegroundApp()
+      bg.removeCallbacks(ticker)
+      bg.postDelayed(ticker, TICK_MS)
+    }
   }
 
+  /** Runs on the main thread: copy what we need and hand it to the blocker's thread. */
   override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-    if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+    event ?: return
+    if (!::bg.isInitialized) return
     val pkg = event.packageName?.toString() ?: return
+    when (event.eventType) {
+      AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> bg.post { onWindowChanged(pkg) }
+      AccessibilityEvent.TYPE_VIEW_SCROLLED -> {
+        if (ShortFormRules.forPkg(pkg) == null) return
+        // Android reuses the event object after we return, so keep a copy for the other thread.
+        val copy = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+          AccessibilityEvent(event)
+        } else {
+          @Suppress("DEPRECATION") AccessibilityEvent.obtain(event)
+        }
+        bg.post { onScrolled(pkg, copy) }
+      }
+    }
+  }
+
+  /**
+   * We normally learn which app is open from "window changed" events, but some switches don't
+   * send one (e.g. going Home with a gesture on Samsung phones), and right after the service
+   * starts (reboot, app update) none has arrived yet. So every tick we also ask Android which
+   * app owns the active window and treat a difference as a switch.
+   */
+  private fun syncForegroundApp() {
+    val pkg = try { rootInActiveWindow?.packageName?.toString() } catch (_: Exception) { null } ?: return
+    if (pkg == currentPkg || pkg in ignored) return
+    if (pkg == packageName && overlay.isShowing) return // that's our popup, not a switch
+    Log.d(TAG, "foreground app: $pkg (was $currentPkg)")
+    onWindowChanged(pkg)
+  }
+
+  private fun onWindowChanged(pkg: String) {
     if (pkg in ignored) return
     // Our own popup also fires window events; they don't mean the user switched apps.
     if (pkg == packageName && overlay.isShowing) return
 
-    flush() // credit time to the app we're leaving
-    currentPkg = pkg
+    flush() // credit time to the app (and viewer state) we're leaving
+    if (pkg != currentPkg) {
+      // Remember an app left while its Reels/Shorts viewer was open: it may keep playing in a
+      // floating window. Only that same app leaving normally clears it (Samsung briefly reports
+      // other windows, like Google Discover, while going Home).
+      currentPkg?.let { if (inShort) leftInShortPkg = it else if (it == leftInShortPkg) leftInShortPkg = null }
+      currentPkg = pkg
+      inShort = false
+      matchedById = false
+      lastPage = null
+    }
 
     // The user left the blocked app (home, another app, our app): take the popup down.
     if (overlay.isShowing && overlay.shownFor != pkg) overlay.hide()
 
+    if (!overlay.isShowing) detect(pkg)
     enforce(pkg)
   }
 
-  /** Adds the time since the last tick to the current app, if it's blocked, visible and the screen is on. */
+  /**
+   * Counts reels/shorts: each swipe in the viewer fires a burst of scroll events, so a burst
+   * (events closer together than SWIPE_GAP_MS) counts as one.
+   */
+  private fun onScrolled(pkg: String, event: AccessibilityEvent) {
+    if (pkg != currentPkg || !inShort || overlay.isShowing) return
+    val rule = ShortFormRules.forPkg(pkg) ?: return
+    if (rule.pageId != null) return // this app is counted by page change in detect()
+    if (!BlockerStore.isTracked(this, pkg)) return
+
+    // When the viewer was found by ID, only count scrolls of that viewer (not e.g. a comments sheet).
+    if (matchedById && rule.viewIds.isNotEmpty()) {
+      val sourceId = try { event.source?.viewIdResourceName } catch (_: Exception) { null }
+      if (sourceId != null && sourceId !in rule.viewIds) return
+    }
+
+    val now = SystemClock.elapsedRealtime()
+    val newSwipe = now - lastScrollAt > SWIPE_GAP_MS
+    lastScrollAt = now
+    if (newSwipe) {
+      BlockerStore.addCount(this, BlockerStore.shortScope(pkg))
+      Log.d(TAG, "$pkg ${rule.feedName}: swipe counted")
+    }
+  }
+
+  private fun takeBreak(pkg: String, leaveWithBack: Boolean) {
+    breakPkg = pkg
+    breakAt = SystemClock.elapsedRealtime()
+    if (leaveWithBack) leaveShortViewer(pkg) else performGlobalAction(GLOBAL_ACTION_HOME)
+  }
+
+  /**
+   * "Leave Reels": get out of the viewer but stay in the app. Escalates step by step, checking
+   * after each one whether the viewer is gone:
+   *   1. tap the app's Home tab if it's on screen (never leaves the app; Instagram's Reels *tab*
+   *      ignores Back, and Back on a first screen would close the app), otherwise press Back
+   *      (works when a reel was opened full-screen from the feed or a chat);
+   *   2. press Back;
+   *   3. give up and go to the phone's home screen, so the user is never stuck.
+   */
+  private fun leaveShortViewer(pkg: String) {
+    // The popup was only just removed; give Android a moment to make the app's window active
+    // again, otherwise rootInActiveWindow still points at our popup and the Home tab isn't found.
+    bg.postDelayed({ leaveShortViewerNow(pkg) }, WINDOW_SETTLE_MS)
+  }
+
+  private fun leaveShortViewerNow(pkg: String) {
+    val rule = ShortFormRules.forPkg(pkg)
+    val root = try { rootInActiveWindow } catch (_: Exception) { null }
+      ?.takeIf { it.packageName?.toString() == pkg }
+    val tapped = rule != null && root != null && ShortFormRules.clickExitTab(rule, root)
+    if (!tapped) performGlobalAction(GLOBAL_ACTION_BACK)
+    Log.d(TAG, "$pkg: leaving ${rule?.feedName} by ${if (tapped) "tapping Home tab" else "Back"}")
+    bg.postDelayed({ escapeStep(pkg, 1) }, ESCAPE_CHECK_MS)
+  }
+
+  private fun escapeStep(pkg: String, step: Int) {
+    if (currentPkg != pkg || overlay.isShowing) return
+    detect(pkg)
+    if (!inShort) return
+    breakAt = SystemClock.elapsedRealtime() // keep the popup from coming back mid-escape
+    val rule = ShortFormRules.forPkg(pkg) ?: return
+    if (step == 1) {
+      Log.d(TAG, "$pkg: still in ${rule.feedName}; pressing Back")
+      performGlobalAction(GLOBAL_ACTION_BACK)
+      bg.postDelayed({ escapeStep(pkg, 2) }, ESCAPE_CHECK_MS)
+    } else {
+      Log.d(TAG, "$pkg: still in ${rule.feedName}; going to the home screen")
+      performGlobalAction(GLOBAL_ACTION_HOME)
+    }
+  }
+
+  /** Re-checks whether the short-video viewer is on screen, for supported apps only. */
+  private fun detect(pkg: String) {
+    val rule = ShortFormRules.forPkg(pkg)
+    if (rule == null || !BlockerStore.isTracked(this, pkg)) {
+      inShort = false
+      return
+    }
+    val root = try { rootInActiveWindow } catch (_: Exception) { null } ?: return
+    // The active window can briefly belong to something else (a system dialog); keep the old state.
+    if (root.packageName?.toString() != pkg) return
+
+    val match = ShortFormRules.match(rule, root)
+    val wasInShort = inShort
+    inShort = match != ShortFormRules.Match.NONE
+    matchedById = match == ShortFormRules.Match.BY_ID
+    if (inShort != wasInShort) Log.d(TAG, "$pkg ${rule.feedName}: ${if (inShort) "entered ($match)" else "left"}")
+    if (!inShort) {
+      lastPage = null
+      return
+    }
+    BlockerStore.noteRuleMatch(this, pkg)
+    // Entering the viewer means one reel is already playing; later swipes add the rest.
+    if (!wasInShort) {
+      BlockerStore.addCount(this, BlockerStore.shortScope(pkg))
+      lastScrollAt = SystemClock.elapsedRealtime()
+    }
+    if (rule.pageId != null) {
+      val page = ShortFormRules.visiblePage(rule, root) ?: return
+      val previous = lastPage
+      lastPage = page
+      // A different container on screen than at the last check means the user swiped.
+      if (wasInShort && previous != null && page != previous) {
+        BlockerStore.addCount(this, BlockerStore.shortScope(pkg))
+        Log.d(TAG, "$pkg ${rule.feedName}: new page counted")
+      }
+    }
+  }
+
+  /**
+   * Looks for a tracked app in a floating (picture-in-picture) window, e.g. YouTube keeps
+   * playing a Short in a small window after the user goes Home or opens our Toll screen.
+   */
+  private fun checkFloatingWindow() {
+    pipPkg = null
+    pipInShort = false
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    val list = try { windows } catch (_: Exception) { return }
+    for (w in list) {
+      if (!w.isInPictureInPictureMode) continue
+      val root = try { w.root } catch (_: Exception) { null } ?: continue
+      val pkg = root.packageName?.toString() ?: continue
+      if (pkg == currentPkg || pkg == packageName || !BlockerStore.isTracked(this, pkg)) continue
+      pipPkg = pkg
+      val rule = ShortFormRules.forPkg(pkg)
+      pipInShort = rule != null &&
+        (leftInShortPkg == pkg || ShortFormRules.match(rule, root) != ShortFormRules.Match.NONE)
+      return
+    }
+  }
+
+  /** A floating window only uses up time while it's actually playing (sound is on). */
+  private fun floatingIsPlaying(): Boolean =
+    (getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.isMusicActive == true
+
+  /**
+   * Adds the time since the last tick to the app on screen (if it's tracked, visible and the
+   * screen is on) and to a tracked app playing in a floating window.
+   */
   private fun flush() {
     val now = SystemClock.elapsedRealtime()
-    val pkg = currentPkg
-    val counting = pkg != null &&
-      pkg != packageName &&
-      !overlay.isShowing &&
-      isScreenOn() &&
-      BlockerStore.limitMinutes(this, pkg) != null
-    if (counting) BlockerStore.addUsage(this, pkg!!, now - lastTick)
+    val ms = now - lastTick
     lastTick = now
+    if (!isScreenOn()) return
+
+    val pkg = currentPkg
+    if (pkg != null && pkg != packageName && !overlay.isShowing && BlockerStore.isTracked(this, pkg)) {
+      BlockerStore.addUsage(this, pkg, ms) // whole-app time always includes Reels time
+      val short = BlockerStore.shortScope(pkg)
+      if (ShortFormRules.forPkg(pkg) != null && BlockerStore.limitMinutes(this, short) != null) {
+        if (inShort) {
+          BlockerStore.addUsage(this, short, ms)
+        } else {
+          BlockerStore.addRuleMiss(this, pkg, ms)
+          // Safety net: detection looks broken, so count the whole app against the Reels limit.
+          if (BlockerStore.isRulesStale(this, pkg)) BlockerStore.addUsage(this, short, ms)
+        }
+      }
+    }
+
+    val pip = pipPkg
+    if (pip != null && floatingIsPlaying()) {
+      BlockerStore.addUsage(this, pip, ms)
+      if (pipInShort) BlockerStore.addUsage(this, BlockerStore.shortScope(pip), ms)
+    }
   }
 
   private fun enforce(pkg: String) {
     if (pkg == packageName) return
     if (overlay.isShowing) return
-    if (!BlockerStore.isOverLimit(this, pkg)) return
+    val short = BlockerStore.shortScope(pkg)
+    val request = when {
+      BlockerStore.isOverLimit(this, pkg) -> BlockRequest(pkg, pkg, leaveWithBack = false)
+      inShort && BlockerStore.isOverLimit(this, short) -> BlockRequest(pkg, short, leaveWithBack = true)
+      // Safety net: we can't see the viewer, so block the whole app but charge the Reels scope.
+      BlockerStore.isRulesStale(this, pkg) && BlockerStore.isOverLimit(this, short) ->
+        BlockRequest(pkg, short, leaveWithBack = false)
+      else -> return
+    }
     val now = SystemClock.elapsedRealtime()
     if (now - lastShown < RESHOW_GAP_MS) return
     // Apps can send a late "window opened" event right after the user chose "Take a break";
     // don't let that pop the overlay straight back up.
     if (pkg == breakPkg && now - breakAt < BREAK_COOLDOWN_MS) return
     lastShown = now
-    overlay.show(pkg)
+    overlay.show(request)
   }
 
-  private fun openToll(pkg: String) {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("$DEEP_LINK_SCHEME://toll?pkg=${Uri.encode(pkg)}"))
+  /**
+   * A floating window over its limit and still playing: bring the app back to full screen, where
+   * the normal popup takes over. At most once every PIP_EXPAND_GAP_MS so it can't loop.
+   */
+  private fun enforceFloatingWindow() {
+    val pip = pipPkg ?: return
+    if (overlay.isShowing || !floatingIsPlaying()) return
+    val over = BlockerStore.isOverLimit(this, pip) ||
+      (pipInShort && BlockerStore.isOverLimit(this, BlockerStore.shortScope(pip)))
+    if (!over) return
+    val now = SystemClock.elapsedRealtime()
+    if (now - lastPipExpand < PIP_EXPAND_GAP_MS) return
+    lastPipExpand = now
+    Log.d(TAG, "$pip: floating window over its limit; reopening full screen")
+    val intent = packageManager.getLaunchIntentForPackage(pip)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: return
+    try {
+      startActivity(intent)
+    } catch (_: Exception) {
+    }
+  }
+
+  private fun openToll(pkg: String, scope: String) {
+    val uri = "$DEEP_LINK_SCHEME://toll?pkg=${Uri.encode(pkg)}&scope=${Uri.encode(scope)}"
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
       .setPackage(packageName)
       .addFlags(
         Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -113,12 +386,8 @@ class BlockerService : AccessibilityService() {
     try {
       startActivity(intent)
     } catch (_: Exception) {
-      takeBreak()
+      performGlobalAction(GLOBAL_ACTION_HOME)
     }
-  }
-
-  private fun takeBreak() {
-    performGlobalAction(GLOBAL_ACTION_HOME)
   }
 
   private fun isScreenOn(): Boolean =
@@ -132,7 +401,10 @@ class BlockerService : AccessibilityService() {
   }
 
   override fun onDestroy() {
-    handler.removeCallbacks(ticker)
+    if (::bg.isInitialized) {
+      bg.removeCallbacksAndMessages(null)
+      worker.quitSafely()
+    }
     if (::overlay.isInitialized) overlay.hide()
     running = false
     super.onDestroy()
@@ -144,8 +416,22 @@ class BlockerService : AccessibilityService() {
     const val TICK_MS = 2_000L
     const val RESHOW_GAP_MS = 800L
     const val BREAK_COOLDOWN_MS = 1_500L
+    const val SWIPE_GAP_MS = 700L
+    const val ESCAPE_CHECK_MS = 700L
+    const val WINDOW_SETTLE_MS = 250L
+    const val PIP_EXPAND_GAP_MS = 10_000L
+    /** Filter logs with: adb logcat -s MmsBlocker */
+    const val TAG = "MmsBlocker"
 
     @Volatile
     var running = false
   }
 }
+
+/**
+ * What the popup should block.
+ * @param scope the limit that was reached: the app's package, or "<pkg>:short" for Reels/Shorts.
+ * @param leaveWithBack true for a Reels limit: "Leave Reels" taps Home/presses Back instead of
+ *   going to the phone's home screen.
+ */
+data class BlockRequest(val pkg: String, val scope: String, val leaveWithBack: Boolean)

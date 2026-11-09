@@ -40,11 +40,12 @@ export function AccessibilityCard({ enabled }: { enabled: boolean }) {
       </View>
       <AppText color={colors.text}>
         Mind-Muscle Sync uses Android&apos;s Accessibility service only to see{' '}
-        <AppText style={styles.strong}>which app is open</AppText>, so it can pause the apps you pick after your
-        daily limit.
+        <AppText style={styles.strong}>which app is open</AppText> and, in Instagram, YouTube and Facebook,{' '}
+        <AppText style={styles.strong}>which section is open</AppText> (like Reels or Shorts). That&apos;s how
+        it pauses what you pick after your daily limit.
       </AppText>
       <AppText color={colors.textMuted}>
-        It never reads what&apos;s on your screen, what you type, or any personal data. Nothing leaves your
+        It never reads your messages, what you type, or what&apos;s in posts and videos. Nothing leaves your
         phone.
       </AppText>
       <AppText variant="caption" color={colors.textMuted}>
