@@ -9,6 +9,7 @@ import { Screen } from '@/components/ui/Screen';
 import { useBrain } from '@/features/brain/store';
 import { BANK_DAILY_CAP, PRACTICE_BANK_MINUTES, PRACTICE_PASS, PRACTICE_QUESTIONS } from '@/features/brain/toll';
 import { TodayAppsCard } from '@/features/blocker/components/TodayAppsCard';
+import { MUSCLE_PRACTICE_BANK_MINUTES } from '@/features/muscle/toll';
 import { byUrgency, scopeStatuses, worstLevel } from '@/features/blocker/limits';
 import { appLabel, useBlocker } from '@/features/blocker/store';
 import { useLiveBlocker } from '@/features/blocker/useLiveBlocker';
@@ -64,16 +65,19 @@ export default function HomeScreen() {
         color={colors.brain}
         dark={colors.brainDark}
         soft={colors.brainSoft}
+        tone="brain"
         onPress={() => router.push('/brain?mode=practice')}
       />
       <PracticeCard
         title="Muscle"
         icon="barbell"
-        description="Squats and jumping jacks, counted by your camera."
-        reward="Soon"
+        description="5 squats, 10 jumping jacks or 8 arm raises, counted by your camera."
+        reward={`+${MUSCLE_PRACTICE_BANK_MINUTES} min`}
         color={colors.muscle}
         dark={colors.muscleDark}
         soft={colors.muscleSoft}
+        tone="muscle"
+        onPress={() => router.push('/muscle?mode=practice')}
       />
     </Screen>
   );
@@ -131,6 +135,7 @@ function PracticeCard({
   color,
   dark,
   soft,
+  tone,
   onPress,
 }: {
   title: string;
@@ -140,6 +145,7 @@ function PracticeCard({
   color: string;
   dark: string;
   soft: string;
+  tone: 'brain' | 'muscle';
   onPress?: () => void;
 }) {
   const disabled = !onPress;
@@ -180,7 +186,7 @@ function PracticeCard({
       {!disabled && (
         <ChunkyButton
           label="Start"
-          tone="brain"
+          tone={tone}
           icon={<Ionicons name="play" size={18} color={colors.textOnColor} />}
           onPress={onPress}
         />

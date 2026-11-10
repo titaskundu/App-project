@@ -39,6 +39,7 @@ export default function RootLayout() {
         <Stack.Screen name="toll" options={{ presentation: 'fullScreenModal', gestureEnabled: false, animation: 'fade' }} />
         <Stack.Screen name="pick-apps" options={{ presentation: 'modal' }} />
         <Stack.Screen name="brain" options={{ presentation: 'fullScreenModal', gestureEnabled: false, animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="muscle" options={{ presentation: 'fullScreenModal', gestureEnabled: false, animation: 'slide_from_bottom' }} />
         <Stack.Screen name="interests" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="blocked-apps" options={{ animation: 'slide_from_right' }} />
       </Stack>

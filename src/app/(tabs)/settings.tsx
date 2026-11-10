@@ -15,6 +15,8 @@ import { AppIconStack } from '@/features/blocker/components/AppIconStack';
 import { byUrgency, scopeStatuses, worstLevel } from '@/features/blocker/limits';
 import { useBlocker } from '@/features/blocker/store';
 import { useLiveBlocker } from '@/features/blocker/useLiveBlocker';
+import { useMuscle } from '@/features/muscle/store';
+import { EXERCISE_ORDER, EXERCISE_TEXT } from '@/features/muscle/toll';
 import { colors, radius, space } from '@/theme/tokens';
 
 const MAX_TOPIC_CHIPS = 3;
@@ -29,6 +31,7 @@ export default function SettingsScreen() {
   const pkgs = byUrgency(targets, today);
   useAppIcons(pkgs.slice(0, 3));
   const brainAreas = useBrain((s) => s.areas);
+  const checked = useMuscle((s) => s.checked);
 
   const levels = pkgs.map((p) => worstLevel(scopeStatuses(targets, today, p)));
   const over = levels.filter((l) => l === 'over').length;
@@ -106,6 +109,36 @@ export default function SettingsScreen() {
             size="sm"
             icon={<Ionicons name="refresh" size={14} color={colors.primary} />}
             onPress={() => router.push('/brain?mode=calibration')}
+          />
+        </View>
+      </HubRow>
+
+      <HubRow
+        title="Muscle moves"
+        accent={colors.muscle}
+        a11y={`Muscle moves: ${checked.length} of 3 movement checks done. Redo movement check`}
+        onPress={() => router.push('/muscle?mode=calibration')}>
+        <View style={styles.chips}>
+          {EXERCISE_ORDER.map((ex) => (
+            <Chip
+              key={ex}
+              label={EXERCISE_TEXT[ex].name}
+              icon={checked.includes(ex) ? 'checkmark' : undefined}
+              color={colors.muscleDark}
+              bg={colors.muscleSoft}
+            />
+          ))}
+        </View>
+        <View style={styles.levelRow}>
+          <AppText variant="caption" color={colors.textMuted} style={styles.flex}>
+            Reps count against your own range
+          </AppText>
+          <ChunkyButton
+            label="Movement check"
+            tone="neutral"
+            size="sm"
+            icon={<Ionicons name="scan" size={14} color={colors.primary} />}
+            onPress={() => router.push('/muscle?mode=calibration')}
           />
         </View>
       </HubRow>

@@ -10,6 +10,7 @@ import { ChunkyButton } from '@/components/ui/ChunkyButton';
 import { useBrain } from '@/features/brain/store';
 import { BANK_USE_MAX, questionCount, TOLL_MINUTES } from '@/features/brain/toll';
 import { formatDuration, isShortScope } from '@/features/blocker/limits';
+import { MUSCLE_TOLL_MINUTES, repsFor } from '@/features/muscle/toll';
 import { scopeLabel, useBlocker } from '@/features/blocker/store';
 import { colors, radius, space } from '@/theme/tokens';
 import { AppBlocker } from '@modules/app-blocker';
@@ -17,7 +18,7 @@ import { AppBlocker } from '@modules/app-blocker';
 /**
  * The Toll screen, opened by the blocker popup (mindmusclesync://toll?pkg=…&scope=…) when a
  * limit is reached. scope is the app ("pkg") or its Reels/Shorts ("pkg:short").
- * Ways to unlock: banked practice minutes, a Brain toll, (Phase 3) a Muscle toll.
+ * Ways to unlock: banked practice minutes, a Brain toll, a Muscle toll.
  */
 export default function TollScreen() {
   const params = useLocalSearchParams<{ pkg?: string; scope?: string }>();
@@ -118,14 +119,22 @@ export default function TollScreen() {
           />
         </Card>
 
-        <Card style={[styles.card, styles.disabled]}>
+        <Card tint={colors.muscleSoft} style={styles.card}>
           <View style={styles.row}>
             <Ionicons name="barbell" size={22} color={colors.muscleDark} />
             <AppText variant="label" color={colors.muscleDark}>
               MUSCLE TOLL
             </AppText>
           </View>
-          <AppText color={colors.textMuted}>A few squats or jumping jacks, checked by your camera. Coming soon.</AppText>
+          <AppText color={colors.text}>
+            {`${repsFor('squat', tollsToday)} squats, ${repsFor('jack', tollsToday)} jumping jacks or ${repsFor('raise', tollsToday)} arm raises, counted by your camera. Good form adds up to +5 min.`}
+          </AppText>
+          <ChunkyButton
+            label={`Start · +${MUSCLE_TOLL_MINUTES} min`}
+            tone="muscle"
+            size="lg"
+            onPress={() => router.push({ pathname: '/muscle', params: { mode: 'toll', pkg, scope } })}
+          />
         </Card>
 
         <ChunkyButton label="Not now · go home" tone="neutral" onPress={leave} />
@@ -164,6 +173,5 @@ const styles = StyleSheet.create({
   },
   card: { gap: space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  disabled: { opacity: 0.6 },
   dev: { alignSelf: 'center', padding: space.sm },
 });

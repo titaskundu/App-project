@@ -129,13 +129,18 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 6. Phone test: a Brain toll in each of the 5 areas with Wi-Fi and mobile data off unlocks the blocked app.
 - **Done when:** a Brain toll in each of the 5 areas works fully offline and unlocks the blocked app.
 
-### Phase 3 — Muscle Mode
-- `src/features/muscle/`: camera + pose model in a background frame processor, joint-angle helpers, rep counters:
-  - **Squat:** hip–knee–ankle angle (points 23–25–27 / 24–26–28), down below ~100°, up above ~160°, plus a depth check.
+### Phase 3 — Muscle Mode (plan agreed 2026-11-10)
+- **Camera + pose (native, `modules/pose-camera/`):** a Kotlin Expo module with a camera view. CameraX front camera → **MediaPipe Pose Landmarker (lite model, bundled in the app, ~5–6 MB)** in live-stream mode → 33 body points + confidence sent to JS ~15–20×/s. On-device and offline; no video is saved or uploaded. Camera permission asked on first use with an explanation. (Chosen over VisionCamera v5 + TFLite: fewer native packages to keep in step with Reanimated/worklets, and no model conversion or pre/post-processing to write. Android-only, so Google's detector is the simplest path.)
+- **Rep counting (pure TS, `src/features/muscle/`, unit-tested):** joint angles, smoothing, a "whole body in frame" check, one state machine per exercise (gap between down/up thresholds + minimum rep time so one shaky rep isn't counted twice):
+  - **Squat:** hip–knee–ankle angle (points 23–25–27 / 24–26–28), down below ~100°, up above ~160°.
   - **Jumping jack:** wrists above head + feet wider than shoulders, then back.
-  - **Low-impact:** overhead arm raises (shoulder angle) or a timed wall-sit.
-- Single-squat calibration to set your range of motion, a "step back so I can see you" check, skeleton overlay, rep ring, form tips.
-- **Done when:** reps are counted reliably by a phone propped about 2 m away, in normal room lighting.
+  - **Overhead arm raises** (the low-impact move): both arms raised fully overhead, then lowered.
+  - **Lenient counting (user's choice):** anything close to a full rep counts; tips ("Go a bit lower") show for shallow reps. Each rep is still graded full/shallow for the form bonus.
+- **Calibration:** one slow rep of each move adjusts the thresholds to the user's range of motion.
+- **Toll rules (user's choice, "tiny"):** 1st toll of the day 5 squats / 10 jumping jacks / 8 arm raises; +1 / +2 / +2 per repeat, capped at 2× (10 / 20 / 16). The user picks the move. A pass unlocks **10 min + a form bonus** (≥80% full-form reps → +5 min, ≥50% → +2 min). Tolls are counted together with Brain tolls for the daily repeat count.
+- **Screens:** `src/app/muscle.tsx` (`?mode=toll|practice|calibration`): setup ("prop your phone, step back"; a body outline turns green when fully in frame) → 3-2-1 → live camera with skeleton overlay, coral rep ring and form tips → result. Toll screen's Muscle option goes live; Home's Muscle practice card goes live and banks minutes like Brain.
+- **Testing:** Jest on synthetic + recorded pose sequences (numbers only). Emulator for layout/flow. The real "counts at 2 m" check needs the user to do a few sets on the phone while Claude reads the logs (debug builds can record landmark sequences as test fixtures).
+- **Done when:** reps are counted reliably by a phone propped about 2 m away, in normal room lighting, and a Muscle toll unlocks the blocked app fully offline.
 
 ### Phase 4 — Supabase + AI
 - Tables: profiles, skill_ratings, toll_events, problem_pool, purchases, inventory. Row-level security so each user only sees their own data.
@@ -204,6 +209,21 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 ---
 
 ## Current status (2026-11-08)
+**Phase 3 — Muscle Mode (2026-11-11): 🟢 phone-tested with the user (Galaxy S23); awaiting formal Phase 3 sign-off before Phase 4.**
+- Phone test round (2026-11-10/11), all fixed and re-verified on the phone with debug logs:
+  - Release builds couldn't load the pose model (R8 renamed Flogger, which MediaPipe needs). Fixed with a keep rule in `modules/pose-camera/android/proguard-rules.pro`; a model-load error is no longer hidden by the camera's "ready".
+  - Squats: missed reps (ankles hidden at the bottom, "tallest standing ever" memory, odd movement checks). Now: **auto-switch** (legs when the feet were in view for most of the last 5 s, else hip drop in shoulder widths, so the phone can sit on a table; the user chose this), standing = top 20% of the last 5 s, bows never count (tip "Bend your knees, chest up"), and a movement check can only make a move easier than the defaults (all moves). Jumping jacks still need the full body (user's choice).
+  - Setup waits until the user stands still; leaving during the 3-2-1 stops it; leaving during a set pauses (frames where the user isn't really there are never counted), then setup + a fresh 3-2-1, reps kept.
+  - Measured on the phone: ~16 fps, 26–45 ms per frame; real squats drop the hips 1.0–1.8 shoulder widths (full rep = 0.9), so there's margin. Arm raises were fine as first built.
+  - 82 tests total. Release build with all of this installed on the phone.
+- Open with the user: the app's data on the phone looked cleared on 2026-11-10 (no blocked apps, 0 Sparks) and the blocker's accessibility service is off; ask before re-enabling. Possible tweak: pose throttle is 40 ms, so the 30 fps camera gives ~16 fps; lower it if fast jumping jacks get missed.
+- Native `modules/pose-camera/`: CameraX + MediaPipe Pose Landmarker lite (`tasks-vision` 1.2.2, LLM runtime excluded), on-device and offline; back camera if there's no front one; keeps the screen on; camera permission with an explanation screen (and "Open settings" once Android stops asking).
+- Rep counting (`src/features/muscle/`): squat (hip drop vs standing height, follows the user stepping closer/back), jumping jack (arms AND feet), arm raise (both hands up, straight elbows for full form); lenient counting at 60% of a full rep; full form at 92%; tips for shallow attempts; movement check (one slow rep per move, first time and from Settings). 22 new tests (69 total).
+- Rules: 5 squats / 10 jacks / 8 arm raises, +1/+2/+2 per toll today, capped at 2×; 10 min + form bonus (≥80% full → +5, ≥50% → +2); practice banks +5 min (shared bank cap).
+- Screens: move picker, permission ask, live camera with skeleton overlay (outlined so it shows on white walls), 3-2-1, movement check, rep ring in the top corner (middle stays clear for raised arms), tips, pause when the user leaves, result. Toll screen's Muscle card and Home's Muscle practice card are live; Settings has a "Muscle moves" row (movement check).
+- Verified on the emulator (debug simulator `&sim=1`, plus the emulator's real camera feed): picker, permission prompt, real camera preview + pose model running (8–11 fps on the emulator CPU), framing → 3-2-1 → movement check saved → counting → result; practice set (bank full message); **jumping-jack toll for YouTube Shorts: 10/10 full form → "+15 min", prefs show 900000 ms extra and 1 toll, YouTube opened**.
+- Next: Phase 3 sign-off from the user, then Phase 4 (Supabase + AI).
+
 **UI redesign review round 1 (2026-11-10): ✅ fixed on the emulator; not yet on the phone.** The sheet slides with no bounce. Its bar shows time left. Edits are a draft with Save and a save/discard prompt. The order is frozen while the sheet is open, then tiles shuffle into place. Card lips blend with the border. The +/− buttons are coins. Details: `docs/UI-REDESIGN.md` → "Review round 1". Next: install the release build on the phone, take the user's next bug batch, then Phase 2 approval → Phase 3 (Muscle).
 
 **UI redesign (2026-11-10): ✅ built, awaiting your review.** Details in `docs/UI-REDESIGN.md`. Settings became a compact hub; a new Blocked apps screen has tiles, usage rings and a bottom sheet with a Reels only / Whole app / Both switch; Reels (coral + film) vs whole app (indigo + phone) is color-coded everywhere; Home has stat tiles, a talking companion and practice cards; real app icons (new native function); level chips; a "2× if fast" chip; and a color-coded tab bar.
