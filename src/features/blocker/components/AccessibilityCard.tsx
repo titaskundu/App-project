@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
+import { Chip } from '@/components/ui/Chip';
 import { ChunkyButton } from '@/components/ui/ChunkyButton';
 import { colors, fonts, radius, space } from '@/theme/tokens';
 import { AppBlocker } from '@modules/app-blocker';
@@ -14,24 +15,25 @@ import { AppBlocker } from '@modules/app-blocker';
 export function AccessibilityCard({ enabled }: { enabled: boolean }) {
   if (enabled) {
     return (
-      <Card>
+      <Card style={styles.compact}>
         <View style={styles.row}>
-          <Ionicons name="shield-checkmark" size={22} color={colors.success} />
-          <AppText variant="heading" style={styles.flex}>
-            Blocking is on
-          </AppText>
-          <View style={[styles.pill, { backgroundColor: '#DCFCE7' }]}>
-            <AppText variant="caption" color={colors.success}>
-              ACTIVE
+          <View style={styles.shield}>
+            <Ionicons name="shield-checkmark" size={22} color={colors.success} />
+          </View>
+          <View style={styles.flex}>
+            <AppText variant="heading">Blocking is on</AppText>
+            <AppText variant="caption" color={colors.textMuted}>
+              Watching your blocked apps
             </AppText>
           </View>
+          <Chip label="Active" color={colors.success} bg={colors.successSoft} />
         </View>
       </Card>
     );
   }
 
   return (
-    <Card tint={colors.muscleSoft}>
+    <Card tint={colors.muscleSoft} border={colors.muscle} edge={colors.muscleDark}>
       <View style={styles.row}>
         <Ionicons name="warning" size={22} color={colors.muscleDark} />
         <AppText variant="heading" style={styles.flex}>
@@ -65,6 +67,14 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   flex: { flex: 1 },
   strong: { fontFamily: fonts.extrabold },
-  pill: { paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.full },
+  compact: { paddingVertical: space.md },
+  shield: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    backgroundColor: colors.successSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   button: { marginTop: space.sm },
 });

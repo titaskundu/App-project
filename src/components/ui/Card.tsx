@@ -8,11 +8,26 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   /** Optional tinted background, e.g. colors.brainSoft */
   tint?: string;
+  /** Optional colored outline (sides and top). */
+  border?: string;
+  /** Optional colored bottom lip, usually a darker shade of `border`. */
+  edge?: string;
 };
 
 /** Flat card with a 2px border and a thicker bottom edge — no blurry shadows. */
-export function Card({ children, style, tint }: Props) {
-  return <View style={[styles.card, tint ? { backgroundColor: tint } : null, style]}>{children}</View>;
+export function Card({ children, style, tint, border, edge }: Props) {
+  return (
+    <View
+      style={[
+        styles.card,
+        tint ? { backgroundColor: tint } : null,
+        border ? { borderColor: border } : null,
+        edge ? { borderBottomColor: edge } : null,
+        style,
+      ]}>
+      {children}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

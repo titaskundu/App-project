@@ -6,8 +6,10 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/ui/AppText';
+import { Chip } from '@/components/ui/Chip';
 import { ChunkyButton } from '@/components/ui/ChunkyButton';
 import { AREAS } from '@/features/brain/areas';
+import { difficultyFor } from '@/features/brain/rating';
 import { useBrain } from '@/features/brain/store';
 import type { Area } from '@/features/brain/types';
 import { colors, radius, space } from '@/theme/tokens';
@@ -21,7 +23,7 @@ const REACTIONS = ['Ooh, good pick!', 'Big brain energy.', 'Love that.', 'Now we
 export default function InterestsScreen() {
   const { first } = useLocalSearchParams<{ first?: string }>();
   const isFirst = first === '1';
-  const { areas, setAreas } = useBrain();
+  const { areas, setAreas, ratings } = useBrain();
   const [picked, setPicked] = useState<Set<Area>>(() => new Set(areas));
 
   const toggle = (a: Area) => {
@@ -70,6 +72,8 @@ export default function InterestsScreen() {
 
         {AREAS.map((a) => {
           const on = picked.has(a.id);
+          // Level from this area's rating; hidden for areas never played.
+          const level = ratings[a.id] !== undefined ? difficultyFor(ratings[a.id]) : null;
           return (
             <Pressable
               key={a.id}
@@ -82,7 +86,19 @@ export default function InterestsScreen() {
                 <Ionicons name={a.icon} size={26} color={on ? colors.textOnColor : colors.brainDark} />
               </View>
               <View style={styles.flex}>
-                <AppText variant="heading">{a.title}</AppText>
+                <View style={styles.titleRow}>
+                  <AppText variant="heading" style={styles.title}>
+                    {a.title}
+                  </AppText>
+                  {level !== null && (
+                    <Chip
+                      label={`Lv ${level}`}
+                      icon="trending-up"
+                      color={on ? colors.textOnColor : colors.brainDark}
+                      bg={on ? colors.brain : colors.brainSoft}
+                    />
+                  )}
+                </View>
                 <AppText color={colors.textMuted}>{a.description}</AppText>
               </View>
               <Ionicons name={on ? 'checkmark-circle' : 'ellipse-outline'} size={28} color={on ? colors.brain : colors.borderDark} />
@@ -107,6 +123,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   content: { padding: space.md, gap: space.md, paddingBottom: space.xl },
   close: { alignSelf: 'flex-end' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm },
+  title: { flexShrink: 1 },
   flex: { flex: 1 },
   mascotRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   mascot: {

@@ -12,7 +12,7 @@ Android-first Expo (SDK 58) app that blocks distracting apps past a daily limit.
 
 ## Architecture
 - `src/app/` holds routes only (Expo Router). `(tabs)/` contains Home, Stats, Shop and Settings.
-- `src/components/ui/` holds shared building blocks: `AppText`, `ChunkyButton`, `Card`, `Screen`.
+- `src/components/ui/` holds shared building blocks: `AppText`, `ChunkyButton` (pill; `size="sm"` for in-card actions), `Card` (optional colored `border`/`edge` lip), `Chip` (tinted pill + icon + uppercase micro-label), `Screen`. Design notes for the 2026-11-10 redesign: `docs/UI-REDESIGN.md`.
 - `src/features/<feature>/` holds feature logic (brain, muscle, economy…), keeping pure logic separate from UI so it can be unit-tested.
 - `src/theme/tokens.ts` is the **only** place colors, fonts, spacing and radii are defined.
 - `modules/app-blocker/` is the native blocker (Kotlin, classic Expo Modules API, not the new v2 annotation API). Import it as `@modules/app-blocker`.
@@ -23,11 +23,14 @@ Android-first Expo (SDK 58) app that blocks distracting apps past a daily limit.
   - `ShortFormRules.kt`: per-app rules (layout IDs, then selected-tab labels as fallback; labels match exactly or as a prefix before a comma, e.g. Facebook's "Reels, tab 2 of 6") that tell whether the Reels/Shorts viewer is open. Only IDs and labels are read, never text. Swipes are counted from scroll bursts (Instagram) or, when a rule has `pageId`, by the visible page container changing (YouTube sends us no scroll events). A Reels limit's popup says "Leave Reels": tap the app's Home tab (`exitTabId`) if visible, else Back, then Back, then phone home. A whole-app popup goes Home. Safety net: 3 h of app use without a match marks the rules stale and counts the whole app against the Reels limit.
   - Inspect a screen's IDs on a device with `adb shell uiautomator dump /sdcard/ui.xml` then `adb pull /sdcard/ui.xml`.
   - Complex values cross the bridge as JSON strings.
-- `src/features/blocker/`: Zustand store, `useLiveBlocker` polling hook, pure helpers in `limits.ts` (unit-tested), UI cards.
+- `src/features/blocker/`: Zustand store, `useLiveBlocker` polling hook, pure helpers in `limits.ts` (unit-tested: steps, scopes, `limitMode`/`targetsForMode`, `scopeStatuses`/`worstLevel`/`byUrgency`), UI components.
+  - Settings is a short hub; the per-app list lives on `src/app/blocked-apps.tsx` (tile grid, most urgent app wide, tap → `LimitSheet` bottom sheet). `LimitSheet` is an in-screen overlay, not an RN `Modal` (Android Modals stop above the nav bar). Render it last, outside the `SafeAreaView`. It edits a draft (Save, with a save/discard prompt on close). The grid order is frozen while it's open and re-sorts with `LinearTransition` after.
+  - Reels/Shorts limits are always coral + film icon, whole-app limits indigo + phone icon (`modeTones` in tokens, `KIND_ICON` in `ModeChips.tsx`). Keep that coding on any new screen.
+  - App icons: native `getAppIconsAsync` writes PNGs to the cache folder; call `useAppIcons(pkgs)` once per screen (batched), then render `AppIcon`.
 - `src/features/brain/`: Brain Mode. Pure logic (unit-tested): `types.ts`, `generators/` (math + aptitude, logic + puzzles), `pack/` (hand-written GK/Coding/Words + `validateQuestions`), `rating.ts` (Elo), `select.ts`, `toll.ts` (all toll rules and numbers). State: `store.ts` (Zustand persisted via `expo-sqlite/kv-store`), `history.ts` (answers table in `brain.db`). UI: `useBrainSession.ts` + `components/`. Routes: `src/app/brain.tsx` (`?mode=toll|practice|calibration`), `interests.tsx`, `toll.tsx`.
   - Debug builds log `[brain-q] <id> type=… answer=…` for automated device tests. For emulator automation turn animations off (`settings put global animator_duration_scale 0`, etc.), otherwise `uiautomator dump` waits on the timer bar.
 - Tests: `npx jest` (pure logic only, in `__tests__` folders). Import `describe/it/expect` from `@jest/globals` (TypeScript 6 doesn't load Jest's global types automatically).
-- `metro.config.js` blocks Metro from watching Gradle/CMake output (it crashed the watcher). If a JS edit doesn't show up on the device, reload manually with `adb shell input text "RR"`.
+- `metro.config.js` blocks Metro from watching Gradle/CMake output (it crashed the watcher). If a JS edit doesn't show up on the device, reload manually with `adb shell input text "RR"`. If Metro's log shows no new "Bundled" line after edits, its watcher has died: restart it with `npx expo start --dev-client --clear`.
 - Tab bar types come from `expo-router/js-tabs` (React Navigation is bundled inside expo-router in SDK 58).
 - `android/` is generated (`npx expo prebuild`). Never hand-edit it; configure native behavior through `app.json` or config plugins.
 - `plugins/` holds local config plugins. `with-cmake-version.js` pins CMake 4.1.2 (Ninja 1.12+), because the default CMake 3.22/Ninja 1.10 fails on Windows paths over 260 chars. Keep it.

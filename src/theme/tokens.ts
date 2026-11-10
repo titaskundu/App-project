@@ -31,6 +31,7 @@ export const colors = {
 
   // Text (never pure black)
   text: '#1F2340', // deep navy-ink
+  textDark: '#0E1029', // edge under navy-ink fills
   textMuted: '#6B6F86',
   textOnColor: '#FFFFFF',
 
@@ -40,6 +41,11 @@ export const colors = {
   dangerDark: '#B8333A',
   successSoft: '#DCFCE7',
   dangerSoft: '#FEE2E2',
+  warn: '#F59E0B', // amber — "almost out of time"
+  warnSoft: '#FEF3C7',
+
+  /** Dimmed backdrop behind bottom sheets. */
+  scrim: 'rgba(31, 35, 64, 0.45)',
 
   // Code card (Coding questions)
   codeBg: '#1F2340',
@@ -64,6 +70,8 @@ export const type = {
   body: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 24 },
   label: { fontFamily: fonts.extrabold, fontSize: 14, lineHeight: 18, letterSpacing: 0.8 },
   caption: { fontFamily: fonts.bold, fontSize: 12, lineHeight: 16 },
+  /** Chip / badge micro-label (use uppercase). */
+  micro: { fontFamily: fonts.black, fontSize: 11, lineHeight: 14, letterSpacing: 0.9 },
 } as const;
 
 export type TypeVariant = keyof typeof type;
@@ -105,3 +113,14 @@ export const tones = {
 } as const;
 
 export type Tone = keyof typeof tones;
+
+/**
+ * What a limit covers, so "Reels only" and "Whole app" never look alike anywhere:
+ * Reels/Shorts = coral + film, whole app = indigo + phone.
+ */
+export const modeTones = {
+  short: { color: colors.muscle, dark: colors.muscleDark, soft: colors.muscleSoft },
+  app: { color: colors.primary, dark: colors.primaryDark, soft: colors.primarySoft },
+} as const;
+
+export type LimitKind = keyof typeof modeTones;

@@ -204,6 +204,10 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 ---
 
 ## Current status (2026-11-08)
+**UI redesign review round 1 (2026-11-10): ✅ fixed on the emulator; not yet on the phone.** The sheet slides with no bounce. Its bar shows time left. Edits are a draft with Save and a save/discard prompt. The order is frozen while the sheet is open, then tiles shuffle into place. Card lips blend with the border. The +/− buttons are coins. Details: `docs/UI-REDESIGN.md` → "Review round 1". Next: install the release build on the phone, take the user's next bug batch, then Phase 2 approval → Phase 3 (Muscle).
+
+**UI redesign (2026-11-10): ✅ built, awaiting your review.** Details in `docs/UI-REDESIGN.md`. Settings became a compact hub; a new Blocked apps screen has tiles, usage rings and a bottom sheet with a Reels only / Whole app / Both switch; Reels (coral + film) vs whole app (indigo + phone) is color-coded everywhere; Home has stat tiles, a talking companion and practice cards; real app icons (new native function); level chips; a "2× if fast" chip; and a color-coded tab bar.
+
 **Phase 2 review round (2026-11-10): ✅ done, awaiting your review.**
 - UI fixes: Settings "Change topics"/"Redo level check" stacked full-width (labels were cut off); interests speech bubble fixed at 2 lines (cards jumped); pressed cards/answers/"Add limit" keep their height (the card below bounced). Verified on the emulator by measuring card positions.
 - New templates: Mental Math aptitude (speed-distance, work-time, profit-loss, interest, ratios, averages, ages) and Logic puzzles (coding-decoding, directions, letter series, analogies, blood relations, seating). Long prompts get 40–45 s. 38 tests (10,500 aptitude answers re-solved; every puzzle has exactly one valid answer).

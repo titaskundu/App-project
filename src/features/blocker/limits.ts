@@ -94,3 +94,112 @@ export function targetsForPicked(
   }
   return next;
 }
+
+// ---- limit mode: Reels only / whole app / both -------------------------------
+
+export type LimitMode = 'short' | 'app' | 'both';
+
+/** Which limits an app has (null when it isn't tracked). */
+export function limitMode(targets: Record<string, number>, pkg: string): LimitMode | null {
+  const app = targets[pkg] !== undefined;
+  const short = targets[shortScope(pkg)] !== undefined;
+  if (app && short) return 'both';
+  if (app) return 'app';
+  if (short) return 'short';
+  return null;
+}
+
+/**
+ * Targets after switching an app's mode. Limits that stay keep their minutes; a limit that
+ * gets turned on starts at DEFAULT_LIMIT.
+ */
+export function targetsForMode(
+  targets: Record<string, number>,
+  pkg: string,
+  mode: LimitMode
+): Record<string, number> {
+  const next = { ...targets };
+  const short = shortScope(pkg);
+  if (mode === 'app' || mode === 'both') next[pkg] = targets[pkg] ?? DEFAULT_LIMIT;
+  else delete next[pkg];
+  if (mode === 'short' || mode === 'both') next[short] = targets[short] ?? DEFAULT_LIMIT;
+  else delete next[short];
+  return next;
+}
+
+// ---- today's status per app --------------------------------------------------
+
+/** Usage level: under 80% of the allowance, almost out, or out of time. */
+export type UsageLevel = 'ok' | 'near' | 'over';
+
+export function usageLevel(ratio: number): UsageLevel {
+  return ratio >= 1 ? 'over' : ratio >= 0.8 ? 'near' : 'ok';
+}
+
+export type ScopeStatus = {
+  scope: string;
+  kind: 'short' | 'app';
+  limit: number;
+  usedMs: number;
+  allowanceMs: number;
+  /** used / allowance (can pass 1). */
+  ratio: number;
+  level: UsageLevel;
+};
+
+type TodayLike = { usage: Record<string, number>; extra: Record<string, number> } | null | undefined;
+
+/** Status of each limit an app has today: Reels/Shorts first, then whole app. */
+export function scopeStatuses(targets: Record<string, number>, today: TodayLike, pkg: string): ScopeStatus[] {
+  const out: ScopeStatus[] = [];
+  for (const [scope, kind] of [
+    [shortScope(pkg), 'short'],
+    [pkg, 'app'],
+  ] as const) {
+    const limit = targets[scope];
+    if (limit === undefined) continue;
+    const usedMs = today?.usage[scope] ?? 0;
+    const allowance = allowanceMs(limit, today?.extra[scope] ?? 0);
+    const ratio = allowance > 0 ? usedMs / allowance : 1;
+    out.push({ scope, kind, limit, usedMs, allowanceMs: allowance, ratio, level: usageLevel(ratio) });
+  }
+  return out;
+}
+
+/** The app's most pressing level today (any limit over → over). */
+export function worstLevel(statuses: ScopeStatus[]): UsageLevel {
+  const max = Math.max(0, ...statuses.map((s) => s.ratio));
+  return usageLevel(max);
+}
+
+/** Tracked apps sorted most-urgent first (highest used/allowance), keeping add order on ties. */
+export function byUrgency(targets: Record<string, number>, today: TodayLike): string[] {
+  const pkgs = trackedPackages(targets);
+  const score = (pkg: string) => Math.max(0, ...scopeStatuses(targets, today, pkg).map((s) => s.ratio));
+  return pkgs
+    .map((pkg, i) => ({ pkg, i, s: score(pkg) }))
+    .sort((a, b) => b.s - a.s || a.i - b.i)
+    .map((x) => x.pkg);
+}
+
+/** Targets with one app's limits replaced by `limits` (scopes of that app only). */
+export function withAppLimits(
+  targets: Record<string, number>,
+  pkg: string,
+  limits: Record<string, number>
+): Record<string, number> {
+  const next = { ...targets };
+  delete next[pkg];
+  delete next[shortScope(pkg)];
+  for (const [scope, minutes] of Object.entries(limits)) {
+    if (scopePkg(scope) === pkg) next[scope] = minutes;
+  }
+  return next;
+}
+
+/** One app's limits picked out of the targets: { "pkg": 30, "pkg:short": 10 }. */
+export function appLimits(targets: Record<string, number>, pkg: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const scope of [shortScope(pkg), pkg]) if (targets[scope] !== undefined) out[scope] = targets[scope];
+  return out;
+}

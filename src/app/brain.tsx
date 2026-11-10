@@ -2,9 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, { FadeOut, ZoomIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/ui/AppText';
+import { Chip } from '@/components/ui/Chip';
 import { ChunkyButton } from '@/components/ui/ChunkyButton';
 import { AREAS, areaTitle } from '@/features/brain/areas';
 import { ChoiceList } from '@/features/brain/components/ChoiceList';
@@ -17,6 +19,7 @@ import { useBrain } from '@/features/brain/store';
 import {
   BONUS_PER_EXTRA,
   difficultyBump,
+  FAST_SHARE,
   MAX_EXTRA_QUESTIONS,
   passMark,
   passed,
@@ -59,7 +62,9 @@ export default function BrainScreen() {
 
   const q = s.question;
   const answered = s.phase === 'feedback';
-  const right = answered && !s.timedOut && s.given !== null && s.answers.concat(s.extra).at(-1)?.correct;
+  const last = s.answers.concat(s.extra).at(-1);
+  const right = answered && !s.timedOut && s.given !== null && last?.correct;
+  const fastTag = right && last?.fast ? '2× fast' : null;
   const area = AREAS.find((a) => a.id === q.area);
   const doneCount = s.extraMode ? s.extra.length : s.answers.length;
   const total = s.extraMode ? MAX_EXTRA_QUESTIONS : required;
@@ -92,22 +97,31 @@ export default function BrainScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <View style={styles.chip}>
-          {area && <Ionicons name={area.icon} size={16} color={colors.brainDark} />}
-          <AppText variant="caption" color={colors.brainDark}>
-            {areaTitle(q.area).toUpperCase()}
-          </AppText>
+        <View style={styles.chipRow}>
+          <Chip label={areaTitle(q.area)} icon={area?.icon} color={colors.brainDark} bg={colors.brainSoft} />
+          {mode !== 'calibration' && !answered && <FastWindow key={q.id} seconds={s.limit * FAST_SHARE} />}
         </View>
         <AppText variant="title">{q.prompt}</AppText>
         {q.code && <CodeCard code={q.code} />}
 
         {q.type === 'mcq' && q.options ? (
-          <ChoiceList options={q.options} picked={answered ? (s.given ?? '') : null} answer={q.answer} onPick={(o) => s.submit(o)} />
+          <ChoiceList
+            options={q.options}
+            picked={answered ? (s.given ?? '') : null}
+            answer={q.answer}
+            onPick={(o) => s.submit(o)}
+            tag={fastTag}
+          />
         ) : (
           <View style={[styles.answerBox, answered && (right ? styles.answerRight : styles.answerWrong)]}>
             <AppText variant="display" color={s.input ? colors.text : colors.borderDark}>
               {s.input || '?'}
             </AppText>
+            {fastTag && (
+              <View style={styles.answerTag}>
+                <Chip label={fastTag} icon="flash" color={colors.sparkDark} bg={colors.sparkSoft} />
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -122,7 +136,7 @@ export default function BrainScreen() {
             <View style={styles.feedbackHead}>
               <Ionicons name={right ? 'checkmark-circle' : 'close-circle'} size={28} color={right ? colors.success : colors.danger} />
               <AppText variant="heading" color={right ? colors.success : colors.dangerDark}>
-                {right ? (s.answers.concat(s.extra).at(-1)?.fast ? 'Lightning fast!' : 'Correct!') : s.timedOut ? "Time's up" : 'Not quite'}
+                {right ? (last?.fast ? 'Lightning fast!' : 'Correct!') : s.timedOut ? "Time's up" : 'Not quite'}
               </AppText>
             </View>
             {!right && (
@@ -136,6 +150,24 @@ export default function BrainScreen() {
         )}
       </View>
     </SafeAreaView>
+  );
+}
+
+/**
+ * Gold "2×" chip shown while a fast answer still earns the bonus; it disappears when the
+ * fast window closes. Remounted per question (key), so its timer restarts each time.
+ */
+function FastWindow({ seconds }: { seconds: number }) {
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setOpen(false), seconds * 1000);
+    return () => clearTimeout(t);
+  }, [seconds]);
+  if (!open) return null;
+  return (
+    <Animated.View entering={ZoomIn} exiting={FadeOut}>
+      <Chip label="2× if fast" icon="flash" color={colors.sparkDark} bg={colors.sparkSoft} />
+    </Animated.View>
   );
 }
 
@@ -277,16 +309,8 @@ const styles = StyleSheet.create({
   segment: { flex: 1, height: 12, borderRadius: radius.full, backgroundColor: colors.surfaceMuted },
   segmentDone: { backgroundColor: colors.brain },
   body: { padding: space.md, gap: space.md },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs,
-    alignSelf: 'flex-start',
-    paddingHorizontal: space.md,
-    paddingVertical: space.xs,
-    borderRadius: radius.full,
-    backgroundColor: colors.brainSoft,
-  },
+  chipRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  answerTag: { position: 'absolute', top: space.sm, right: space.sm },
   answerBox: {
     minHeight: 84,
     borderRadius: radius.md,

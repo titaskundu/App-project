@@ -5,10 +5,13 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View } f
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/ui/AppText';
+import { Chip } from '@/components/ui/Chip';
 import { ChunkyButton } from '@/components/ui/ChunkyButton';
+import { AppIcon, useAppIcons } from '@/features/blocker/components/AppIcon';
+import { KIND_ICON } from '@/features/blocker/components/ModeChips';
 import { SUGGESTED_PACKAGES, trackedPackages } from '@/features/blocker/limits';
 import { useBlocker } from '@/features/blocker/store';
-import { colors, fonts, radius, space } from '@/theme/tokens';
+import { colors, fonts, modeTones, radius, space } from '@/theme/tokens';
 
 /** Modal list of installed apps. Common distracting apps are listed first. */
 export default function PickAppsScreen() {
@@ -31,6 +34,9 @@ export default function PickAppsScreen() {
     };
     return [...filtered].sort((a, b) => rank(a.packageName) - rank(b.packageName));
   }, [apps, query]);
+
+  // Icons for every installed app, fetched in one batch (cached as small files after the first time).
+  useAppIcons(useMemo(() => apps.map((a) => a.packageName), [apps]));
 
   const toggle = (pkg: string) =>
     setSelected((prev) => {
@@ -77,19 +83,18 @@ export default function PickAppsScreen() {
                 accessibilityState={{ checked: on }}
                 onPress={() => toggle(item.packageName)}
                 style={[styles.item, on && styles.itemOn]}>
-                <View style={[styles.avatar, on && styles.avatarOn]}>
-                  <AppText variant="heading" color={on ? colors.textOnColor : colors.primary}>
-                    {item.label.charAt(0).toUpperCase()}
-                  </AppText>
-                </View>
+                <AppIcon pkg={item.packageName} label={item.label} size={44} />
                 <View style={styles.flex}>
                   <AppText variant="bodyLg" numberOfLines={1}>
                     {item.label}
                   </AppText>
                   {shortFormApps[item.packageName] && (
-                    <AppText variant="caption" color={colors.brainDark}>
-                      Can limit just {shortFormApps[item.packageName]}
-                    </AppText>
+                    <Chip
+                      label={`Can limit just ${shortFormApps[item.packageName]}`}
+                      icon={KIND_ICON.short}
+                      color={modeTones.short.dark}
+                      bg={modeTones.short.soft}
+                    />
                   )}
                 </View>
                 <Ionicons
@@ -122,12 +127,12 @@ const styles = StyleSheet.create({
   search: {
     margin: space.md,
     height: 52,
-    borderRadius: radius.md,
+    borderRadius: radius.full,
     borderWidth: 2,
     borderTopWidth: 4,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    paddingHorizontal: space.md,
+    paddingHorizontal: space.lg,
     fontFamily: fonts.semibold,
     fontSize: 16,
     color: colors.text,
@@ -139,21 +144,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     padding: space.md,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 2,
+    borderBottomWidth: 4,
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
   itemOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarOn: { backgroundColor: colors.primary },
-  flex: { flex: 1 },
+  flex: { flex: 1, gap: 4 },
   footer: { padding: space.md, borderTopWidth: 2, borderColor: colors.border, backgroundColor: colors.surface },
 });

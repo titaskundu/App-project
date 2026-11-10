@@ -8,7 +8,7 @@ import {
   type TodayStats,
 } from '@modules/app-blocker';
 
-import { scopePkg, shortScope, targetsForPicked } from './limits';
+import { scopePkg, shortScope, targetsForPicked, withAppLimits } from './limits';
 
 /**
  * App-side view of the blocker. The native module is the source of truth (the watcher
@@ -24,6 +24,8 @@ type BlockerState = {
   accessibilityOn: boolean;
   /** Apps whose Reels/Shorts can be limited separately: pkg → "Reels" | "Shorts". */
   shortFormApps: ShortFormApps;
+  /** pkg → local icon file URI ('' = none), filled on demand by loadIcons. */
+  icons: Record<string, string>;
 
   loadApps: () => Promise<void>;
   refresh: () => void;
@@ -33,7 +35,14 @@ type BlockerState = {
   setLimit: (scope: string, minutes: number | null) => void;
   /** Stop tracking an app entirely (both limits). */
   removeApp: (pkg: string) => void;
+  /** Replace one app's limits (e.g. { "pkg:short": 10 }) in one save, from the limit sheet. */
+  saveAppLimits: (pkg: string, limits: Record<string, number>) => void;
+  /** Fetch icons for these apps (only the ones not loaded yet). */
+  loadIcons: (pkgs: string[]) => Promise<void>;
 };
+
+/** Packages whose icon is being fetched right now, so repeated renders don't ask twice. */
+const iconRequests = new Set<string>();
 
 function save(targets: Targets): Targets {
   AppBlocker.setTargets(targets);
@@ -47,6 +56,7 @@ export const useBlocker = create<BlockerState>((set, get) => ({
   today: null,
   accessibilityOn: false,
   shortFormApps: {},
+  icons: {},
 
   loadApps: async () => {
     if (get().appsLoaded) return;
@@ -79,6 +89,24 @@ export const useBlocker = create<BlockerState>((set, get) => ({
     delete targets[pkg];
     delete targets[shortScope(pkg)];
     set({ targets: save(targets) });
+  },
+
+  saveAppLimits: (pkg, limits) => {
+    set({ targets: save(withAppLimits(get().targets, pkg, limits)) });
+  },
+
+  loadIcons: async (pkgs) => {
+    const missing = pkgs.filter((p) => !(p in get().icons) && !iconRequests.has(p));
+    if (missing.length === 0) return;
+    missing.forEach((p) => iconRequests.add(p));
+    try {
+      const found = await AppBlocker.getAppIcons(missing);
+      // '' = no icon (not installed), so it isn't asked for again.
+      const fetched = Object.fromEntries(missing.map((p) => [p, found[p] ?? '']));
+      set({ icons: { ...get().icons, ...fetched } });
+    } finally {
+      missing.forEach((p) => iconRequests.delete(p));
+    }
   },
 }));
 

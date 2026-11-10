@@ -60,7 +60,10 @@ export function timeLimitSeconds(q: { type: 'numeric' | 'mcq'; code?: string; pr
   return long ? 40 : 20;
 }
 
+/** Share of the time limit that counts as a fast answer. */
+export const FAST_SHARE = 0.4;
+
 /** Answered within the first 40% of the time limit → "fast" (2× bonus, Sparks in Phase 5). */
 export function isFast(ms: number, limitSeconds: number): boolean {
-  return ms <= limitSeconds * 1000 * 0.4;
+  return ms <= limitSeconds * 1000 * FAST_SHARE;
 }

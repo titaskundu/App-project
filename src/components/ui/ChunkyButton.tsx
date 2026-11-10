@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'rea
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { AppText } from '@/components/ui/AppText';
-import { depth, radius, space, tones, type Tone } from '@/theme/tokens';
+import { colors, depth, radius, space, tones, type Tone } from '@/theme/tokens';
 
 type Props = {
   label: string;
@@ -12,14 +12,15 @@ type Props = {
   tone?: Tone;
   icon?: ReactNode;
   disabled?: boolean;
-  size?: 'md' | 'lg';
+  /** sm = compact action inside a card (still ≥ 44px with its edge). */
+  size?: 'sm' | 'md' | 'lg';
   style?: StyleProp<ViewStyle>;
 };
 
 const SPRING = { damping: 14, stiffness: 420, mass: 0.6 };
 
 /**
- * Tactile "plastic key" button: a solid darker edge under the face.
+ * Tactile pill-shaped "plastic key" button: a solid darker edge under the face.
  * On press the face drops into the edge, then springs back.
  */
 export function ChunkyButton({
@@ -39,7 +40,7 @@ export function ChunkyButton({
     transform: [{ translateY: press.value * travel }],
   }));
 
-  const height = size === 'lg' ? 64 : depth.minTap;
+  const height = size === 'lg' ? 64 : size === 'sm' ? 40 : depth.minTap;
 
   return (
     <Pressable
@@ -47,6 +48,7 @@ export function ChunkyButton({
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
       disabled={disabled}
+      hitSlop={size === 'sm' ? 6 : undefined}
       onPressIn={() => {
         press.value = withSpring(1, SPRING);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -68,11 +70,12 @@ export function ChunkyButton({
         style={[
           styles.face,
           { height, backgroundColor: t.bg },
+          size === 'sm' && styles.faceSm,
           tone === 'neutral' && styles.neutralFace,
           faceStyle,
         ]}>
         {icon}
-        <AppText variant="label" uppercase numberOfLines={1} color={t.fg}>
+        <AppText variant={size === 'sm' ? 'micro' : 'label'} uppercase numberOfLines={1} color={t.fg} style={styles.label}>
           {label}
         </AppText>
       </Animated.View>
@@ -85,22 +88,24 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    borderRadius: radius.lg,
+    borderRadius: radius.full,
   },
   face: {
-    borderRadius: radius.lg,
+    borderRadius: radius.full,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.sm,
     paddingHorizontal: space.lg,
   },
+  faceSm: { paddingHorizontal: space.md, gap: space.xs },
+  label: { flexShrink: 0 },
   neutralEdge: {
     borderWidth: 2,
-    borderColor: '#D6CEC1',
+    borderColor: colors.borderDark,
   },
   neutralFace: {
     borderWidth: 2,
-    borderColor: '#E7E1D7',
+    borderColor: colors.border,
   },
 });

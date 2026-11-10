@@ -3,6 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui/AppText';
+import { Chip } from '@/components/ui/Chip';
 import { colors, radius, space } from '@/theme/tokens';
 
 type Props = {
@@ -12,13 +13,15 @@ type Props = {
   /** The right answer, revealed once answered. */
   answer: string;
   onPick: (option: string) => void;
+  /** Optional reward tag shown on the right option once answered (e.g. "2× fast"). */
+  tag?: string | null;
 };
 
 /**
  * Chunky multiple-choice buttons. After answering, the right option turns green and a wrong
  * pick turns red; the rest fade.
  */
-export function ChoiceList({ options, picked, answer, onPick }: Props) {
+export function ChoiceList({ options, picked, answer, onPick, tag }: Props) {
   const answered = picked !== null;
 
   return (
@@ -59,6 +62,7 @@ export function ChoiceList({ options, picked, answer, onPick }: Props) {
             <AppText variant="bodyLg" style={styles.text}>
               {opt}
             </AppText>
+            {state === 'right' && tag ? <Chip label={tag} icon="flash" color={colors.sparkDark} bg={colors.sparkSoft} /> : null}
           </Pressable>
         );
       })}
@@ -75,7 +79,7 @@ const styles = StyleSheet.create({
     gap: space.md,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: colors.surface,
     borderWidth: 2,
     borderBottomWidth: 5,

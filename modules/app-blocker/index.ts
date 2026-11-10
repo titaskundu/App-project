@@ -5,6 +5,7 @@ type NativeAppBlocker = {
   isAccessibilityEnabled(): boolean;
   openAccessibilitySettings(): void;
   getInstalledAppsAsync(): Promise<string>;
+  getAppIconsAsync(pkgsJson: string): Promise<string>;
   getTargets(): string;
   setTargets(json: string): void;
   getToday(): string;
@@ -45,6 +46,9 @@ export const AppBlocker = {
   isAccessibilityEnabled: () => Native.isAccessibilityEnabled(),
   openAccessibilitySettings: () => Native.openAccessibilitySettings(),
   getInstalledApps: async (): Promise<InstalledApp[]> => JSON.parse(await Native.getInstalledAppsAsync()),
+  /** pkg → local PNG file URI of its icon (missing for apps that aren't installed). */
+  getAppIcons: async (pkgs: string[]): Promise<Record<string, string>> =>
+    JSON.parse(await Native.getAppIconsAsync(JSON.stringify(pkgs))),
   getTargets: (): Targets => JSON.parse(Native.getTargets()),
   setTargets: (targets: Targets) => Native.setTargets(JSON.stringify(targets)),
   getToday: (): TodayStats => JSON.parse(Native.getToday()),
