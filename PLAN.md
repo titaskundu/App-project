@@ -118,6 +118,8 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 
 **Difficulty (decided 2026-11-09):** Phase 2 uses an Elo-style rating per area and subskill (speed + accuracy, favours weak spots). Phase 4 adds an ML model (item response theory) on Supabase that learns each question's real difficulty from all users' answers; the Phase 2 ratings feed into it.
 
+**Added after review (2026-11-10, done):** aptitude templates to Mental Math (speed/distance/time, work & time, profit/loss/discount, simple & compound interest, ratios, averages, ages) and more Logic templates (coding-decoding, direction sense, letter series, analogies, blood relations, small seating arrangements), all generated on the phone with computed answers. Syllogisms and long word puzzles go to the Phase 4 AI pool.
+
 **Build steps:**
 1. Question format `{id, area, subskill, type: numeric | mcq, prompt, code?, options?, answer, difficulty, explanation}` + on-device storage (expo-sqlite: key-value for picks/ratings/bank, a table for answer history).
 2. Math and logic generators (5 difficulty steps each), unit-tested.
@@ -202,6 +204,23 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 ---
 
 ## Current status (2026-11-08)
+**Phase 2 review round (2026-11-10): ✅ done, awaiting your review.**
+- UI fixes: Settings "Change topics"/"Redo level check" stacked full-width (labels were cut off); interests speech bubble fixed at 2 lines (cards jumped); pressed cards/answers/"Add limit" keep their height (the card below bounced). Verified on the emulator by measuring card positions.
+- New templates: Mental Math aptitude (speed-distance, work-time, profit-loss, interest, ratios, averages, ages) and Logic puzzles (coding-decoding, directions, letter series, analogies, blood relations, seating). Long prompts get 40–45 s. 38 tests (10,500 aptitude answers re-solved; every puzzle has exactly one valid answer).
+- Release build installed on the Galaxy S23 (data kept). The phone now shows no blocked apps and only General Knowledge picked (changed in the app since 2026-11-09; app was never reinstalled).
+- PC: page file moved to T (16–32 GB); commit limit 19 → 33 GB, release builds no longer run out of memory.
+
+**Phase 2 — Brain Mode: ✅ built and tested (emulator + Galaxy S23), awaiting your review (2026-11-09).**
+- Phone check (release build, works without the PC): installed over the debug build (data kept); interests quiz on first launch; Instagram Reels limit 1 min → popup → Pay toll → Toll screen "8 questions" (6 tolls already today) → failed set shows "1/8 right, you need 6" + Try a new set → 8/8 → "10 minutes unlocked for Instagram Reels" → Instagram Reels plays with no popup, reels still counted. Restored afterwards: Reels limit 15 min, all 5 topics, phone animation/stay-awake settings.
+- Release builds must be built with low memory settings on this PC until the page file move to T takes effect (needs a PC restart).
+- Built (`src/features/brain/`): question format; Mental Math (7 subskills) and Logic (sequences, odd-one-out, ordering) generators with answers computed in code; hand-written starter packs (40 each: GK, Coding, Words) with a validator; Elo ratings per area/subskill; adaptive selection (picked areas, weak spots, recently-seen filter); toll rules (3 questions +1 per repeat up to 8, pass ≈75%, 10 min + "Keep going" +2 min each up to +10, repeat tolls harder); practice banking (4/5 right → +5 min, 20/day cap, resets at midnight); answer history in SQLite (`brain.db`); progress persisted with expo-sqlite kv-store.
+- Screens: interests quiz (first launch + Settings), Brain session (keypad / multiple choice / code card, timer, explanations, Keep going), result, 60-second level check, Toll screen (banked minutes, Brain toll, Muscle "coming soon", dev-only skip), Home Practice → Brain with bank pill, Settings → Brain topics.
+- Native: `grantMinutes(scope, minutes, countToll)` — banked minutes don't count as a toll.
+- Tests: 34 Jest tests (generators re-solve every math question, logic answers checked against the clues, packs validated, toll rules, ratings, selection).
+- Verified on the emulator: interests quiz → level check → Home; practice 5/5 → +5 min banked; popup → Pay toll → Toll screen shows bank + "3 questions"; toll 2/3 pass → Keep going → +12 min, Chrome reopens without popup; banked 5 min used (toll count unchanged); failed toll → "Try a new set"; **offline (Wi-Fi + data off): a toll in each of the 5 areas passed, only the picked area was asked, sizes 5/6/7/8/8, +10 min each**.
+- Fixed during testing: number keypad lost the ✓ tap when tapped faster than the screen re-rendered (keypad now tracks typed digits itself).
+- Dev notes: the debug-only LogBox banner can cover the Continue button; `uiautomator dump` hangs while the timer bar animates (turn off emulator animations for automated tests); debug builds log `[brain-q] … answer=` for automated tests (dev only).
+
 **Phase 1.5 re-test (2026-11-09 evening, Galaxy S23, clean test data, user data restored afterwards): ✅ all checks pass after 6 fixes.**
 - Instagram: Home feed adds no Reels time; 1 entry + 5 swipes counted exactly (by page change now); popup "7 reels today"; Leave Reels taps the Home tab.
 - YouTube: 1 entry + 3 swipes counted exactly; Shorts popup + Leave Shorts; Pay toll opens the Toll screen on the first tap; +5 min on Shorts only; floating window counted on the home screen and reopened with the whole-app popup when over the limit; Take a break no longer loops.
@@ -209,7 +228,7 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 - Fixes found by the re-test: (1) window events from background windows (Samsung's Google Discover panel, Samsung Pay hints) briefly switched the "current app" (extra counts, could hide the popup) → only switch if that app owns the active window; (2) Instagram over/under-counted swipes → count by the visible reel container (`clips_media_component`), checked 0.8 s after a scroll, choosing the reel filling most of the screen; (3) the popup re-appeared over our Toll screen while it was opening → 10 s grace after Pay toll; (4) Take a break → YouTube auto-floats and kept playing → reopened in a loop → now the floating video is paused (audio focus) instead; (5) any app's sound made a paused floating window look like it was playing (pulled the user out of Facebook) → floating windows are only counted/reopened when the app in front isn't our app or another limited app; (6) Facebook's Home-tab tap counted as a reel → scrolls ignored while leaving.
 - Known limit added: Android only tells us that *some* sound is playing, not which app; exact per-app playback would need the optional "Notification access" permission (later phase).
 
-**Phase 1.5 — ✅ built and tested on a real phone (2026-11-09), awaiting your review.** Test phone: Galaxy S23 (SM-S911B, Android 16), with Instagram, YouTube and Facebook.
+**Phase 1.5 — ✅ built and tested on a real phone (2026-11-09), approved.** Test phone: Galaxy S23 (SM-S911B, Android 16), with Instagram, YouTube and Facebook.
 - Built: per-scope tracking (`pkg` / `pkg:short`), `ShortFormRules.kt` (IDs → tab labels, prefix match), reel counting (scroll bursts for Instagram/Facebook, page change for YouTube), Reels popup mode with **Leave Reels/Shorts**, floating-window (picture-in-picture) counting and blocking, safety net (3 h without a match → whole app counts against the Reels limit), two optional limits per app in Settings, Reels/Shorts bars + counts on Home, scope-aware Toll screen, new disclosure text, 6 new unit tests (12 total). The blocker's logic now runs on its own background thread.
 - Verified on the phone:
   - Instagram: ✅ Reels detected by `clips_viewer_view_pager`, Home feed not counted; ✅ swipes counted; ✅ popup only inside Reels; ✅ Leave Reels taps `feed_tab` and stays in Instagram (also when Reels was the first screen).

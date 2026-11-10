@@ -38,6 +38,12 @@ export const colors = {
   success: '#22A06B',
   danger: '#E5484D',
   dangerDark: '#B8333A',
+  successSoft: '#DCFCE7',
+  dangerSoft: '#FEE2E2',
+
+  // Code card (Coding questions)
+  codeBg: '#1F2340',
+  codeText: '#E0E7FF',
 } as const;
 
 export const fonts = {
@@ -46,6 +52,8 @@ export const fonts = {
   bold: 'Nunito_700Bold',
   extrabold: 'Nunito_800ExtraBold',
   black: 'Nunito_900Black',
+  /** Code blocks in Coding questions (Android's built-in monospace). */
+  mono: 'monospace',
 } as const;
 
 export const type = {

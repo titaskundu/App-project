@@ -5,9 +5,6 @@ export const LIMIT_STEPS = [1, 5, 10, 15, 20, 30, 45, 60, 90, 120] as const;
 
 export const DEFAULT_LIMIT = 15;
 
-/** Minutes unlocked by one toll (Phase 1 placeholder; Phase 2+ makes repeats harder). */
-export const TOLL_MINUTES = 5;
-
 /** Next limit step up or down from the current value. */
 export function stepLimit(current: number, direction: 1 | -1): number {
   const steps: readonly number[] = LIMIT_STEPS;

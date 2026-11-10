@@ -88,5 +88,5 @@ const styles = StyleSheet.create({
   // Android under-measures letter-spaced text and clips or wraps it ("ADD LIMIT" → "ADD")
   // unless it can't shrink. Used for both small action labels.
   addLabel: { flexShrink: 0 },
-  addPressed: { borderBottomWidth: 2, transform: [{ translateY: 2 }] },
+  addPressed: { borderBottomWidth: 2, marginTop: 2 },
 });

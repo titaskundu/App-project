@@ -58,7 +58,9 @@ class AppBlockerModule : Module() {
     Function("getToday") { BlockerStore.todayJson(context) }
 
     /** scope is a package ("com.instagram.android") or a Reels scope ("com.instagram.android:short"). */
-    Function("grantMinutes") { scope: String, minutes: Int -> BlockerStore.grant(context, scope, minutes) }
+    Function("grantMinutes") { scope: String, minutes: Int, countToll: Boolean ->
+      BlockerStore.grant(context, scope, minutes, countToll)
+    }
 
     /** JSON object of apps whose Reels/Shorts can be limited separately: { pkg: "Reels" | "Shorts" }. */
     Function("getShortFormApps") { JSONObject(ShortFormRules.feedNames()).toString() }

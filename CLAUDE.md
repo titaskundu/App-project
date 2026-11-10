@@ -24,6 +24,8 @@ Android-first Expo (SDK 58) app that blocks distracting apps past a daily limit.
   - Inspect a screen's IDs on a device with `adb shell uiautomator dump /sdcard/ui.xml` then `adb pull /sdcard/ui.xml`.
   - Complex values cross the bridge as JSON strings.
 - `src/features/blocker/`: Zustand store, `useLiveBlocker` polling hook, pure helpers in `limits.ts` (unit-tested), UI cards.
+- `src/features/brain/`: Brain Mode. Pure logic (unit-tested): `types.ts`, `generators/` (math + aptitude, logic + puzzles), `pack/` (hand-written GK/Coding/Words + `validateQuestions`), `rating.ts` (Elo), `select.ts`, `toll.ts` (all toll rules and numbers). State: `store.ts` (Zustand persisted via `expo-sqlite/kv-store`), `history.ts` (answers table in `brain.db`). UI: `useBrainSession.ts` + `components/`. Routes: `src/app/brain.tsx` (`?mode=toll|practice|calibration`), `interests.tsx`, `toll.tsx`.
+  - Debug builds log `[brain-q] <id> type=… answer=…` for automated device tests. For emulator automation turn animations off (`settings put global animator_duration_scale 0`, etc.), otherwise `uiautomator dump` waits on the timer bar.
 - Tests: `npx jest` (pure logic only, in `__tests__` folders). Import `describe/it/expect` from `@jest/globals` (TypeScript 6 doesn't load Jest's global types automatically).
 - `metro.config.js` blocks Metro from watching Gradle/CMake output (it crashed the watcher). If a JS edit doesn't show up on the device, reload manually with `adb shell input text "RR"`.
 - Tab bar types come from `expo-router/js-tabs` (React Navigation is bundled inside expo-router in SDK 58).
@@ -35,6 +37,7 @@ Android-first Expo (SDK 58) app that blocks distracting apps past a daily limit.
 - JDK 17 is at `C:\Program Files\Microsoft\jdk-17.0.21.21-hotspot` (the system's default Java 27 is too new for Android builds).
 - Emulator dev build: `cd android && .\gradlew.bat assembleDebug -PreactNativeArchitectures=x86_64`. Drop the flag for real-phone builds.
 - After an emulator reboot, run `adb reverse tcp:8081 tcp:8081` again, or debug builds show a black screen.
+- Release builds (`assembleRelease`, JS bundled in, works without Metro). The page file is on T (16–32 GB, set 2026-11-10), so normal builds work. If one still runs out of memory: `gradlew --stop`, stop Metro, then `.\gradlew.bat assembleRelease --no-daemon "-Dorg.gradle.jvmargs=-Xmx1536m" -PreactNativeArchitectures=<arch>`. Release is signed with the debug key, so it installs over a debug build and keeps data.
 - Test hooks: enable the blocker with `adb shell settings put secure enabled_accessibility_services com.mindmusclesync.app/expo.modules.appblocker.BlockerService` (**this replaces the whole list**. On the user's real phone, read the current value first and append ours with `:`); read saved state with `adb shell run-as com.mindmusclesync.app cat shared_prefs/mms_app_blocker.xml`.
 - Known: a **force stop** of the app makes Android disable the Accessibility service until the user re-enables it. Swipe-away and reboot are fine.
 - After `adb install -r` while the blocker is on, Android may list it under "Crashed services" and stop delivering events: delete and re-put `enabled_accessibility_services` after each install. Blocker logs: `adb logcat -s MmsBlocker`.

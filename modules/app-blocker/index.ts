@@ -8,7 +8,7 @@ type NativeAppBlocker = {
   getTargets(): string;
   setTargets(json: string): void;
   getToday(): string;
-  grantMinutes(scope: string, minutes: number): void;
+  grantMinutes(scope: string, minutes: number, countToll: boolean): void;
   getShortFormApps(): string;
   openApp(pkg: string): boolean;
   goHome(): void;
@@ -48,7 +48,8 @@ export const AppBlocker = {
   getTargets: (): Targets => JSON.parse(Native.getTargets()),
   setTargets: (targets: Targets) => Native.setTargets(JSON.stringify(targets)),
   getToday: (): TodayStats => JSON.parse(Native.getToday()),
-  grantMinutes: (scope: string, minutes: number) => Native.grantMinutes(scope, minutes),
+  /** Adds minutes to a scope today. countToll=false for banked practice minutes (not a toll). */
+  grantMinutes: (scope: string, minutes: number, countToll = true) => Native.grantMinutes(scope, minutes, countToll),
   getShortFormApps: (): ShortFormApps => JSON.parse(Native.getShortFormApps()),
   openApp: (pkg: string) => Native.openApp(pkg),
   goHome: () => Native.goHome(),

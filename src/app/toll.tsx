@@ -1,31 +1,36 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect } from 'react';
-import { BackHandler, StyleSheet, View } from 'react-native';
+import { BackHandler, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
 import { ChunkyButton } from '@/components/ui/ChunkyButton';
-import { formatDuration, isShortScope, TOLL_MINUTES } from '@/features/blocker/limits';
+import { useBrain } from '@/features/brain/store';
+import { BANK_USE_MAX, questionCount, TOLL_MINUTES } from '@/features/brain/toll';
+import { formatDuration, isShortScope } from '@/features/blocker/limits';
 import { scopeLabel, useBlocker } from '@/features/blocker/store';
 import { colors, radius, space } from '@/theme/tokens';
 import { AppBlocker } from '@modules/app-blocker';
 
 /**
- * The Toll screen, opened by the blocker (mindmusclesync://toll?pkg=...&scope=...) when a limit
- * is reached. scope is the app ("pkg") or its Reels/Shorts ("pkg:short").
- * Phase 1 uses a test toll button; Brain and Muscle tolls replace it in Phases 2–3.
+ * The Toll screen, opened by the blocker popup (mindmusclesync://toll?pkg=…&scope=…) when a
+ * limit is reached. scope is the app ("pkg") or its Reels/Shorts ("pkg:short").
+ * Ways to unlock: banked practice minutes, a Brain toll, (Phase 3) a Muscle toll.
  */
 export default function TollScreen() {
   const params = useLocalSearchParams<{ pkg?: string; scope?: string }>();
   const pkg = params.pkg ?? '';
   const scope = params.scope || pkg;
   const { apps, loadApps, refresh, today, targets, shortFormApps } = useBlocker();
+  const bankMinutes = useBrain((s) => s.bankAvailable());
+  const bankUse = useBrain((s) => s.bankUse);
   const name = scopeLabel(apps, shortFormApps, scope);
   const used = today?.usage[scope] ?? 0;
-  const tollsToday = today?.tolls[scope] ?? 0;
   const count = isShortScope(scope) ? (today?.counts[scope] ?? 0) : 0;
+  const tollsToday = Object.values(today?.tolls ?? {}).reduce((a, b) => a + b, 0);
+  const questions = questionCount(tollsToday);
 
   useEffect(() => {
     refresh();
@@ -49,61 +54,100 @@ export default function TollScreen() {
     }, [leave])
   );
 
-  const payTestToll = () => {
-    AppBlocker.grantMinutes(scope, TOLL_MINUTES);
+  const unlock = (minutes: number, countToll: boolean) => {
+    AppBlocker.grantMinutes(scope, minutes, countToll);
     refresh();
-    AppBlocker.openApp(pkg);
+    if (pkg) AppBlocker.openApp(pkg);
     if (router.canGoBack()) router.back();
     else router.replace('/');
   };
 
+  const useBank = () => {
+    const minutes = bankUse(BANK_USE_MAX);
+    if (minutes > 0) unlock(minutes, false);
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.top}>
-        <View style={styles.mascot}>
-          <AppText variant="display">🐼</AppText>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.top}>
+          <View style={styles.mascot}>
+            <AppText variant="display">🐼</AppText>
+          </View>
+          <View style={styles.bubble}>
+            <AppText variant="title" center>
+              Time for a quick break!
+            </AppText>
+            <AppText center color={colors.textMuted}>
+              You&apos;ve used {formatDuration(used)} of {name} today
+              {count > 0 ? ` (${count} watched)` : ''}
+              {targets[scope] ? `. Your limit is ${targets[scope]} min.` : '.'}
+            </AppText>
+          </View>
         </View>
-        <View style={styles.bubble}>
-          <AppText variant="title" center>
-            Time for a quick break!
-          </AppText>
-          <AppText center color={colors.textMuted}>
-            You&apos;ve used {formatDuration(used)} of {name} today
-            {count > 0 ? ` (${count} watched)` : ''}
-            {targets[scope] ? `. Your limit is ${targets[scope]} min.` : '.'}
-          </AppText>
-        </View>
-      </View>
 
-      <Card style={styles.card}>
-        <View style={styles.row}>
-          <Ionicons name="flask" size={20} color={colors.primary} />
-          <AppText variant="label" color={colors.primary}>
-            TEST TOLL · PHASE 1
-          </AppText>
-        </View>
-        <AppText color={colors.textMuted}>
-          Brain puzzles and Muscle reps arrive in the next phases. For now, this button stands in for a toll.
-        </AppText>
-        {tollsToday > 0 && (
-          <AppText variant="caption" color={colors.textMuted}>
-            Tolls paid for {name} today: {tollsToday}
-          </AppText>
+        {bankMinutes > 0 && (
+          <Card tint={colors.sparkSoft} style={styles.card}>
+            <View style={styles.row}>
+              <Ionicons name="wallet" size={22} color={colors.sparkDark} />
+              <AppText variant="label" color={colors.sparkDark}>
+                {`BANKED · ${bankMinutes} MIN`}
+              </AppText>
+            </View>
+            <AppText color={colors.text}>You earned these in practice. Use them instead of a toll.</AppText>
+            <ChunkyButton label={`Use ${Math.min(bankMinutes, BANK_USE_MAX)} banked min`} tone="spark" onPress={useBank} />
+          </Card>
         )}
-        <ChunkyButton label={`Pay toll · +${TOLL_MINUTES} min`} size="lg" onPress={payTestToll} />
-      </Card>
 
-      <ChunkyButton label="Not now · go home" tone="neutral" onPress={leave} style={styles.secondary} />
+        <Card tint={colors.brainSoft} style={styles.card}>
+          <View style={styles.row}>
+            <Ionicons name="bulb" size={22} color={colors.brainDark} />
+            <AppText variant="label" color={colors.brainDark}>
+              {`BRAIN TOLL · ${questions} QUESTIONS`}
+            </AppText>
+          </View>
+          <AppText color={colors.text}>
+            Answer {questions} quick questions from your topics to unlock {TOLL_MINUTES} minutes. Keep going for bonus
+            minutes.
+          </AppText>
+          <ChunkyButton
+            label={`Start · +${TOLL_MINUTES} min`}
+            tone="brain"
+            size="lg"
+            onPress={() => router.push({ pathname: '/brain', params: { mode: 'toll', pkg, scope } })}
+          />
+        </Card>
+
+        <Card style={[styles.card, styles.disabled]}>
+          <View style={styles.row}>
+            <Ionicons name="barbell" size={22} color={colors.muscleDark} />
+            <AppText variant="label" color={colors.muscleDark}>
+              MUSCLE TOLL
+            </AppText>
+          </View>
+          <AppText color={colors.textMuted}>A few squats or jumping jacks, checked by your camera. Coming soon.</AppText>
+        </Card>
+
+        <ChunkyButton label="Not now · go home" tone="neutral" onPress={leave} />
+        {__DEV__ && (
+          <Pressable accessibilityRole="button" onPress={() => unlock(5, true)} style={styles.dev}>
+            <AppText variant="caption" color={colors.textMuted}>
+              DEV ONLY · SKIP TOLL (+5 MIN)
+            </AppText>
+          </Pressable>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background, padding: space.md, justifyContent: 'center', gap: space.lg },
-  top: { alignItems: 'center', gap: space.md },
+  safe: { flex: 1, backgroundColor: colors.background },
+  content: { padding: space.md, gap: space.md, paddingBottom: space.xl },
+  top: { alignItems: 'center', gap: space.md, marginTop: space.md },
   mascot: {
-    width: 120,
-    height: 120,
+    width: 96,
+    height: 96,
     borderRadius: radius.full,
     backgroundColor: colors.primarySoft,
     alignItems: 'center',
@@ -120,5 +164,6 @@ const styles = StyleSheet.create({
   },
   card: { gap: space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  secondary: { marginTop: space.xs },
+  disabled: { opacity: 0.6 },
+  dev: { alignSelf: 'center', padding: space.sm },
 });

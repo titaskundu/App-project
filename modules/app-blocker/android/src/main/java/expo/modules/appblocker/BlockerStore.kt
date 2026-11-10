@@ -131,18 +131,22 @@ object BlockerStore {
     return used >= limit * 60_000L + extra
   }
 
-  /** Adds earned minutes to a scope's allowance for today and counts the toll. */
+  /**
+   * Adds earned minutes to a scope's allowance for today. [countToll] = a toll was paid (makes
+   * the next toll longer); false for banked practice minutes.
+   */
   @Synchronized
-  fun grant(ctx: Context, scope: String, minutes: Int) {
+  fun grant(ctx: Context, scope: String, minutes: Int, countToll: Boolean = true) {
     val p = ensureToday(ctx)
     val extra = readJson(p, KEY_EXTRA)
     extra.put(scope, extra.optLong(scope, 0L) + minutes * 60_000L)
-    val tolls = readJson(p, KEY_TOLLS)
-    tolls.put(scope, tolls.optInt(scope, 0) + 1)
-    p.edit()
-      .putString(KEY_EXTRA, extra.toString())
-      .putString(KEY_TOLLS, tolls.toString())
-      .apply()
+    val edit = p.edit().putString(KEY_EXTRA, extra.toString())
+    if (countToll) {
+      val tolls = readJson(p, KEY_TOLLS)
+      tolls.put(scope, tolls.optInt(scope, 0) + 1)
+      edit.putString(KEY_TOLLS, tolls.toString())
+    }
+    edit.apply()
   }
 
   // ---- rule health (safety net) -------------------------------------------

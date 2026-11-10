@@ -6,6 +6,8 @@ import { AppText } from '@/components/ui/AppText';
 import { Card } from '@/components/ui/Card';
 import { ChunkyButton } from '@/components/ui/ChunkyButton';
 import { Screen } from '@/components/ui/Screen';
+import { areaTitle } from '@/features/brain/areas';
+import { useBrain } from '@/features/brain/store';
 import { AccessibilityCard } from '@/features/blocker/components/AccessibilityCard';
 import { LimitStepper } from '@/features/blocker/components/LimitStepper';
 import { ScopeLimitRow } from '@/features/blocker/components/ScopeLimitRow';
@@ -18,6 +20,7 @@ export default function SettingsScreen() {
   useLiveBlocker(4000);
   const { apps, targets, today, accessibilityOn, shortFormApps, setLimit, removeApp } = useBlocker();
   const pkgs = trackedPackages(targets);
+  const brainAreas = useBrain((s) => s.areas);
 
   return (
     <Screen>
@@ -94,6 +97,26 @@ export default function SettingsScreen() {
         );
       })}
 
+      <View style={styles.sectionHead}>
+        <AppText variant="heading">Brain topics</AppText>
+        <AppText variant="caption" color={colors.textMuted}>
+          Used in tolls
+        </AppText>
+      </View>
+      <Card style={styles.appCard}>
+        <View style={styles.chips}>
+          {brainAreas.map((a) => (
+            <View key={a} style={styles.chip}>
+              <AppText variant="caption" color={colors.brainDark}>
+                {areaTitle(a).toUpperCase()}
+              </AppText>
+            </View>
+          ))}
+        </View>
+        <ChunkyButton label="Change topics" tone="brain" onPress={() => router.push('/interests')} />
+        <ChunkyButton label="Redo level check" tone="neutral" onPress={() => router.push('/brain?mode=calibration')} />
+      </Card>
+
       <ChunkyButton
         label={pkgs.length ? 'Add or remove apps' : 'Pick apps'}
         tone="neutral"
@@ -110,6 +133,8 @@ const styles = StyleSheet.create({
   appRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   flex: { flex: 1 },
   divider: { height: 2, backgroundColor: colors.surfaceMuted },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  chip: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: radius.full, backgroundColor: colors.brainSoft },
   warning: {
     flexDirection: 'row',
     gap: space.sm,
