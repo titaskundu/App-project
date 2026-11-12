@@ -17,6 +17,7 @@ import { useBlocker } from '@/features/blocker/store';
 import { useLiveBlocker } from '@/features/blocker/useLiveBlocker';
 import { useMuscle } from '@/features/muscle/store';
 import { EXERCISE_ORDER, EXERCISE_TEXT } from '@/features/muscle/toll';
+import { useSync } from '@/features/sync/sync';
 import { colors, radius, space } from '@/theme/tokens';
 
 const MAX_TOPIC_CHIPS = 3;
@@ -32,6 +33,7 @@ export default function SettingsScreen() {
   useAppIcons(pkgs.slice(0, 3));
   const brainAreas = useBrain((s) => s.areas);
   const checked = useMuscle((s) => s.checked);
+  const sync = useSync();
 
   const levels = pkgs.map((p) => worstLevel(scopeStatuses(targets, today, p)));
   const over = levels.filter((l) => l === 'over').length;
@@ -140,6 +142,28 @@ export default function SettingsScreen() {
             icon={<Ionicons name="scan" size={14} color={colors.primary} />}
             onPress={() => router.push('/muscle?mode=calibration')}
           />
+        </View>
+      </HubRow>
+
+      <HubRow
+        title="Account & data"
+        accent={colors.spark}
+        a11y={`Account and data: ${sync.isAnonymous ? 'not backed up yet' : 'backed up with Google'}`}
+        onPress={() => router.push('/account')}>
+        <View style={styles.inline}>
+          <Ionicons
+            name={!sync.configured ? 'phone-portrait' : sync.isAnonymous ? 'cloud-offline' : 'cloud-done'}
+            size={22}
+            color={sync.isAnonymous ? colors.textMuted : colors.success}
+          />
+          <View style={styles.flex}>
+            <AppText variant="bodyLg">
+              {!sync.configured ? 'Saved on this phone' : sync.isAnonymous ? 'Not backed up yet' : 'Backed up with Google'}
+            </AppText>
+            <AppText variant="caption" color={colors.textMuted} numberOfLines={1}>
+              {sync.isAnonymous ? 'Back up, export or delete your data' : (sync.email ?? 'Export or delete your data')}
+            </AppText>
+          </View>
         </View>
       </HubRow>
     </Screen>

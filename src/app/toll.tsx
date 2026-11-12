@@ -12,6 +12,7 @@ import { BANK_USE_MAX, questionCount, TOLL_MINUTES } from '@/features/brain/toll
 import { formatDuration, isShortScope } from '@/features/blocker/limits';
 import { MUSCLE_TOLL_MINUTES, repsFor } from '@/features/muscle/toll';
 import { scopeLabel, useBlocker } from '@/features/blocker/store';
+import { recordTollEvent } from '@/features/sync/sync';
 import { colors, radius, space } from '@/theme/tokens';
 import { AppBlocker } from '@modules/app-blocker';
 
@@ -65,7 +66,10 @@ export default function TollScreen() {
 
   const useBank = () => {
     const minutes = bankUse(BANK_USE_MAX);
-    if (minutes > 0) unlock(minutes, false);
+    if (minutes > 0) {
+      recordTollEvent({ kind: 'bank', scope, minutes });
+      unlock(minutes, false);
+    }
   };
 
   return (

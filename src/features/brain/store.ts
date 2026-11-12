@@ -43,6 +43,10 @@ type BrainState = {
   bankUse: (max: number) => number;
   /** Banked minutes available right now (after the midnight reset). */
   bankAvailable: () => number;
+  /** Replace progress with a backup (new phone). Today's bank is kept. */
+  restore: (b: { areas: Area[]; ratings: Ratings; calibrated: boolean; fastAnswers: number; seen: string[] }) => void;
+  /** Start over ("Delete my data"). */
+  resetProgress: () => void;
 };
 
 function freshBank(bank: Bank): Bank {
@@ -90,6 +94,19 @@ export const useBrain = create<BrainState>()(
       },
 
       bankAvailable: () => freshBank(get().bank).minutes,
+
+      restore: (b) =>
+        set({ areas: b.areas, ratings: b.ratings, calibrated: b.calibrated, fastAnswers: b.fastAnswers, seen: b.seen }),
+
+      resetProgress: () =>
+        set({
+          areas: [],
+          ratings: {},
+          seen: [],
+          calibrated: false,
+          fastAnswers: 0,
+          bank: { day: todayKey(), minutes: 0, earnedToday: 0 },
+        }),
     }),
     {
       name: 'mms-brain',

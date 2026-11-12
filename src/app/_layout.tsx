@@ -11,6 +11,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { startSync } from '@/features/sync/sync';
 import { colors } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
@@ -29,6 +30,9 @@ export default function RootLayout() {
     if (loaded || error) SplashScreen.hideAsync();
   }, [loaded, error]);
 
+  // Background backup to Supabase (does nothing offline or when not configured).
+  useEffect(() => startSync(), []);
+
   if (!loaded && !error) return null;
 
   return (
@@ -42,6 +46,7 @@ export default function RootLayout() {
         <Stack.Screen name="muscle" options={{ presentation: 'fullScreenModal', gestureEnabled: false, animation: 'slide_from_bottom' }} />
         <Stack.Screen name="interests" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="blocked-apps" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="account" options={{ animation: 'slide_from_right' }} />
       </Stack>
     </>
   );

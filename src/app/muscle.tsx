@@ -29,6 +29,7 @@ import {
 import { simFrame } from '@/features/muscle/testing/fakePose';
 import type { Exercise } from '@/features/muscle/types';
 import { useMuscleSession, type Interruption } from '@/features/muscle/useMuscleSession';
+import { recordTollEvent } from '@/features/sync/sync';
 import { colors, radius, space } from '@/theme/tokens';
 import { AppBlocker } from '@modules/app-blocker';
 import { PoseCamera, PoseCameraView, type CameraPermission, type PoseStatus } from '@modules/pose-camera';
@@ -59,6 +60,8 @@ export default function MuscleScreen() {
   const [tollsToday] = useState(() => Object.values(useBlocker.getState().today?.tolls ?? {}).reduce((a, b) => a + b, 0));
   const [exercise, setExercise] = useState<Exercise | null>(isExercise(params.exercise) ? params.exercise : null);
   const [perm, setPerm] = useState<CameraPermission | null>(null);
+  const consent = useMuscle((s) => s.poseConsent);
+  const sim = __DEV__ && params.sim === '1';
 
   useEffect(() => {
     PoseCamera.getPermission()
@@ -83,6 +86,7 @@ export default function MuscleScreen() {
   };
 
   if (!exercise) return <Picker mode={mode} tollsToday={tollsToday} onPick={pick} close={close} />;
+  if (!consent && !sim) return <ConsentAsk close={close} />;
   if (!perm) return <SafeAreaView style={styles.safe} />;
   if (!perm.granted) return <PermissionAsk perm={perm} onChange={setPerm} close={close} />;
 
@@ -96,7 +100,7 @@ export default function MuscleScreen() {
       pkg={pkg}
       scope={scope}
       close={close}
-      sim={__DEV__ && params.sim === '1'}
+      sim={sim}
     />
   );
 }
@@ -215,6 +219,40 @@ function PermissionAsk({
           size="lg"
           onPress={blocked ? () => Linking.openSettings() : ask}
         />
+        <ChunkyButton label="Not now" tone="neutral" onPress={close} />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const MEDIAPIPE_TERMS_URL = 'https://developers.google.com/edge/mediapipe/legal/tos';
+
+/** One-time consent before the rep counter first runs (it sends Google usage stats, never images). */
+function ConsentAsk({ close }: { close: () => void }) {
+  return (
+    <SafeAreaView style={[styles.safe, styles.permWrap]}>
+      <ScrollView contentContainerStyle={styles.consentScroll}>
+        <View style={styles.permIcon}>
+          <Ionicons name="shield-checkmark" size={48} color={colors.muscle} />
+        </View>
+        <AppText variant="title" center>
+          Before we count reps
+        </AppText>
+        <AppText variant="bodyLg" center color={colors.textMuted}>
+          The rep counter uses Google’s MediaPipe. Your camera images stay on this phone and are never saved or sent.
+        </AppText>
+        <AppText center color={colors.textMuted}>
+          MediaPipe sends Google usage stats: this app’s ID, your phone model and Android version, how often it ran, and
+          general details of the camera frames (like their size). You can withdraw anytime in Settings → Account & data.
+        </AppText>
+        <Pressable accessibilityRole="link" hitSlop={8} onPress={() => Linking.openURL(MEDIAPIPE_TERMS_URL)}>
+          <AppText variant="label" uppercase center color={colors.primary}>
+            Google’s details
+          </AppText>
+        </Pressable>
+      </ScrollView>
+      <View style={styles.actions}>
+        <ChunkyButton label="I agree" tone="muscle" size="lg" onPress={() => useMuscle.getState().setPoseConsent(true)} />
         <ChunkyButton label="Not now" tone="neutral" onPress={close} />
       </View>
     </SafeAreaView>
@@ -427,9 +465,11 @@ function Result({
   useEffect(() => {
     if (mode === 'practice' && !bankedOnce.current) {
       bankedOnce.current = true;
-      setBanked(useBrain.getState().bankAdd(MUSCLE_PRACTICE_BANK_MINUTES));
+      const added = useBrain.getState().bankAdd(MUSCLE_PRACTICE_BANK_MINUTES);
+      setBanked(added);
+      recordTollEvent({ kind: 'muscle', mode: 'practice', passed: true, minutes: added, exercise, reps, fullReps });
     }
-  }, [mode]);
+  }, [mode, exercise, reps, fullReps]);
 
   const minutes = muscleReward(fullReps, reps);
   const bonus = formBonus(fullReps, reps);
@@ -439,6 +479,7 @@ function Result({
   };
   const claim = () => {
     if (scope) AppBlocker.grantMinutes(scope, minutes, true);
+    recordTollEvent({ kind: 'muscle', mode: 'toll', scope, passed: true, minutes, exercise, reps, fullReps });
     refresh();
     if (pkg) AppBlocker.openApp(pkg);
     leaveAll();
@@ -525,6 +566,7 @@ const styles = StyleSheet.create({
   privacy: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },
   permWrap: { padding: space.md, justifyContent: 'space-between' },
   permTop: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.md },
+  consentScroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', gap: space.md },
   permIcon: {
     width: 120,
     height: 120,

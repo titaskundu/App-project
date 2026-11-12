@@ -1,11 +1,13 @@
 import * as SQLite from 'expo-sqlite';
 
+import { queueAnswer } from '@/features/sync/sync';
+
 import type { AnswerRecord } from './types';
 
 /**
  * Every answer is kept in a small on-device SQLite table. Phase 6 builds the Stats screen
- * (skill radar, heatmap) from it, and Phase 4 can upload it (anonymously) to train the
- * difficulty model.
+ * (skill radar, heatmap) from it. Each answer is also queued for upload to the user's account
+ * (features/sync), which feeds the Phase 4b difficulty model.
  */
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -39,6 +41,16 @@ export function saveAnswer(a: AnswerRecord, mode: SessionMode): void {
     );
   } catch {
     // History is nice to have; never let it break a toll.
+  }
+  queueAnswer(a, mode);
+}
+
+/** Deletes the on-phone answer history ("Delete my data"). */
+export function clearHistory(): void {
+  try {
+    open().runSync('DELETE FROM answers');
+  } catch {
+    // ignore
   }
 }
 

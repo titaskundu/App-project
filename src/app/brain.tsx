@@ -16,6 +16,7 @@ import { TimerBar } from '@/features/brain/components/TimerBar';
 import type { SessionMode } from '@/features/brain/history';
 import { difficultyFor, START_RATING } from '@/features/brain/rating';
 import { useBrain } from '@/features/brain/store';
+import { recordTollEvent } from '@/features/sync/sync';
 import {
   BONUS_PER_EXTRA,
   difficultyBump,
@@ -209,6 +210,19 @@ function Result({
     }
   }, [mode, banked, bankAdd, setCalibrated]);
 
+  // Sync: practice results and failed tolls are recorded when shown; a passed toll on claim.
+  const answered = s.answers.length;
+  const answeredRight = s.answers.filter((a) => a.correct).length;
+  const recordedOnce = useRef(false);
+  useEffect(() => {
+    if (recordedOnce.current) return;
+    recordedOnce.current = true;
+    if (mode === 'practice')
+      recordTollEvent({ kind: 'brain', mode, passed: practicePassed, minutes: banked, questions: answered, correct: answeredRight });
+    else if (mode === 'toll' && !ok)
+      recordTollEvent({ kind: 'brain', mode, scope, passed: false, minutes: 0, questions: answered, correct: answeredRight });
+  }, [mode, ok, practicePassed, banked, scope, answered, answeredRight]);
+
   const leaveAll = () => {
     if (router.canDismiss()) router.dismissAll();
     else router.replace('/');
@@ -217,6 +231,7 @@ function Result({
   const claim = () => {
     const minutes = tollReward(s.extraCorrect);
     if (scope) AppBlocker.grantMinutes(scope, minutes, true);
+    recordTollEvent({ kind: 'brain', mode: 'toll', scope, passed: true, minutes, questions: answered, correct: answeredRight });
     refresh();
     if (pkg) AppBlocker.openApp(pkg);
     leaveAll();

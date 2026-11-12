@@ -143,6 +143,18 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 - **Done when:** reps are counted reliably by a phone propped about 2 m away, in normal room lighting, and a Muscle toll unlocks the blocked app fully offline.
 
 ### Phase 4 — Supabase + AI
+**Split (decided 2026-11-12):** **4a** = accounts, sync and data controls (below, in progress). **4b** = AI questions (all five areas), difficulty model, Report question, coach tip, remote Reels rules. The user is rethinking *how* AI questions are generated and will propose a method; 4b's generation design waits for that.
+
+**4a (plan agreed 2026-11-12):**
+- Anonymous Supabase account at first launch (never blocks the app; offline = retry later). Optional **Back up with Google** in Settings → Account & data (links Google to the same account). New phone / reinstall: Google sign-in finds the existing account, this phone's history merges in (one-time transfer token), and the user picks "Restore backup" or "Keep this phone's progress".
+- **Full backup:** limits incl. app names, Brain topics/ratings, Muscle movement checks/totals (`user_state` snapshots), every toll result (`toll_events`) and every Brain answer (`answers`, linked to the account; feeds 4b). Daily usage is not synced.
+- **Export my data** (JSON via share sheet) and **Delete my data** (deletes the account and all rows; resets Brain/Muscle progress on the phone; blocked-app limits stay).
+- Never collected: camera images, screen text, anything typed, contacts, location.
+- **EU setup (the user is based in Germany, 2026-11-12):** Supabase region **EU, Ireland (eu-west-1)** (project created there; any EU region works for GDPR); GDPR applies to all users because the developer is in the EU. Export = GDPR Art. 20, Delete = Art. 17 (both in 4a). Supabase's DPA is built into their Terms of Service for every organization (checked 2026-11-12, nothing to sign; keep a PDF copy); privacy policy names the controller (name + address); no personal data sent to the AI in 4b (numbers only); minimum age 16 in Germany (or parental consent) to decide by Phase 7.
+- **TDDDG §25 / MediaPipe:** MediaPipe's usage metrics to Google aren't strictly necessary, so EU users must consent before the camera model first runs. **Done in 4a (user agreed 2026-11-12):** one-time consent sheet before the first Muscle session (`ConsentAsk` in `src/app/muscle.tsx`, `poseConsent` in the Muscle store, a per-phone setting that isn't backed up); withdraw in Settings → Account & data. "Not now" leaves Brain tolls available.
+- MediaPipe sends Google its own usage metrics (app ID, device/OS, inference counts, general media characteristics; never the images) with no documented opt-out ([MediaPipe terms](https://developers.google.com/edge/mediapipe/legal/tos)). Disclose in the Phase 7 privacy policy and Data safety form, and add a consent line in Phase 6 onboarding.
+
+**Original Phase 4 notes:**
 - Tables: profiles, skill_ratings, toll_events, problem_pool, purchases, inventory. Row-level security so each user only sees their own data.
 - Anonymous sign-in at first launch; optional Google sign-in to keep data across phones.
 - **Brain questions become AI-generated here** (decided 2026-11-09): the phone downloads fresh AI batches for the user's areas whenever online, so the offline supply is AI-made; the Phase 2 starter pack becomes the last resort.
@@ -157,6 +169,7 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 - The app syncs events when online and works fully offline.
 
 ### Phase 5 — Rewards & shop
+- **Markets (decided 2026-11-12): India and Germany/EU both at launch.** Play sets local prices per country: ₹ in India (₹10–20 Time Passes), € in the EU (about €0.49–0.99); plan both price tables. German-language text later.
 - Sparks (bonuses for speed and good form), Toll Complete screen, Time Pass (bought with Sparks or paid through Play Billing), one shared daily cap, avatar wardrobe.
 - Sunday Boss: a combined squats + algebra challenge that drops rare cosmetics. It **does not** lock your weekend, it's a bonus. It appears in Home's Practice section on Sundays.
 - Banked minutes from practice tolls: daily bank cap, spent automatically when a blocked app hits its limit, counted against the shared daily cap rules.
@@ -209,6 +222,15 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 ---
 
 ## Current status (2026-11-08)
+**Phase 4a — Accounts, sync and data controls (2026-11-12): 🟢 phone-tested (Galaxy S23); awaiting the user's review.**
+- Setup done by the user: Supabase project `mind-muscle-sync` (EU Ireland, eu-west-1; anonymous sign-ins + manual linking + Google provider on), Google Cloud OAuth (Android client with the debug SHA-1, Web client). Keys in `.env.local`. Migration pushed with the CLI (`npx supabase db push --remote`); read-only checks with `npx supabase db query --remote --read-only`.
+- Security check (scratch script, two throwaway anonymous users): 26/26 passed (no cross-user read/update/delete/insert, nothing for signed-out callers, fake/reused transfer tickets rejected, transfer moves rows and deletes the anonymous user).
+- Phone tests, verified in the database: consent sheet → arm raises; offline Brain practice queued and uploaded later (5 answers); Back up with Google linked the same account; export JSON via share sheet; clear app data → Google sign-in → "Found your backup" → topics, 2 limits and Muscle checks restored, new answers merged, anonymous user removed; Delete my data removed the Google account and all rows, then a fresh anonymous account started. Release build (R8) starts and syncs.
+- Dev pitfall found: launching with `am start -n` left two MainActivity roots and expo-router's imperative router unbound (see CLAUDE.md). Not reachable through normal launches.
+- Code: `supabase/migrations/20261112000000_phase4a.sql` (tables + row-level security + `delete_my_account` / `issue_transfer_token` / `claim_transfer`), `src/features/sync/` (client, outbox queue in `sync.db`, snapshots, Google backup/restore, export, delete), `src/app/account.tsx`, Settings "Account & data" row; toll results recorded from Brain/Muscle/bank; answers queued from `history.saveAnswer`.
+- Checks: tsc + eslint clean, 96 Jest tests (14 new: outbox batching/backoff, row builders, defensive backup reading).
+- Next: user creates the Supabase project + Google OAuth clients → push migration → security check with two users → phone tests (offline toll, Google backup, restore after clearing data, export, delete) → release build → review.
+
 **Phase 3 — Muscle Mode (2026-11-11): 🟢 phone-tested with the user (Galaxy S23); awaiting formal Phase 3 sign-off before Phase 4.**
 - Phone test round (2026-11-10/11), all fixed and re-verified on the phone with debug logs:
   - Release builds couldn't load the pose model (R8 renamed Flogger, which MediaPipe needs). Fixed with a keep rule in `modules/pose-camera/android/proguard-rules.pro`; a model-load error is no longer hidden by the camera's "ready".

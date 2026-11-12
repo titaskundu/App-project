@@ -54,3 +54,6 @@ modules/*/android/build/
 modules/*/android/.cxx/
 modules/*/android/.gradle/
 stitch_app_ui_redesign.zip
+
+# Supabase CLI local cache
+supabase/.temp/
