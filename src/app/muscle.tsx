@@ -326,7 +326,13 @@ function Session({
             <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={12} onPress={close} style={styles.roundBtn}>
               <Ionicons name="close" size={26} color={colors.text} />
             </Pressable>
-            <Chip label={mode === 'calibration' ? 'Movement check' : text.name} icon={ICONS[exercise]} color={colors.muscleDark} bg={colors.surface} />
+            <Chip
+              label={mode === 'calibration' ? 'Movement check' : text.name}
+              icon={ICONS[exercise]}
+              color={colors.muscleDark}
+              bg={colors.surface}
+              style={styles.headChip}
+            />
           </View>
           {/* Also while paused mid-set, so the user sees their reps are kept. */}
           {(counting || s.reps > 0) && <RepRing reps={s.reps} target={target} tick={s.repTick} />}
@@ -580,6 +586,8 @@ const styles = StyleSheet.create({
   camWrap: { flex: 1, backgroundColor: colors.text },
   camHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', padding: space.md },
   headLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  // Chip defaults to alignSelf flex-start; center it on the ✕ button (minus the button's 2px lip).
+  headChip: { alignSelf: 'center', marginBottom: 2 },
   roundBtn: {
     width: 52,
     height: 52,

@@ -64,8 +64,9 @@ function StepButton({
       style={[styles.coin, disabled && styles.disabled]}>
       {({ pressed }) => (
         <>
-          <View style={[styles.circle, styles.edge, { backgroundColor: t.dark }]} />
-          <View style={[styles.circle, { backgroundColor: t.color }, pressed && styles.facePressed]}>
+          {/* Disabled: no edge circle, the face sits flat (a faded face over its edge looked doubled). */}
+          {!disabled && <View style={[styles.circle, styles.edge, { backgroundColor: t.dark }]} />}
+          <View style={[styles.circle, { backgroundColor: t.color }, (pressed || disabled) && styles.facePressed, disabled && styles.faceFlat]}>
             <Ionicons name={icon} size={22} color={colors.textOnColor} />
           </View>
         </>
@@ -90,5 +91,6 @@ const styles = StyleSheet.create({
   },
   edge: { top: LIP },
   facePressed: { top: LIP - 1 },
+  faceFlat: { top: LIP },
   disabled: { opacity: 0.35 },
 });

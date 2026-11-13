@@ -58,18 +58,22 @@ export function ChunkyButton({
       }}
       onPress={onPress}
       style={[{ height: height + depth.raised, opacity: disabled ? 0.5 : 1 }, style]}>
-      {/* the edge sits underneath and stays put */}
-      <View
-        style={[
-          styles.edge,
-          { height, backgroundColor: t.edge, top: depth.raised },
-          tone === 'neutral' && styles.neutralEdge,
-        ]}
-      />
+      {/* the edge sits underneath and stays put. A disabled button has no edge: it sits flat
+          where the edge would be, so the faded face never shows a second shape behind it. */}
+      {!disabled && (
+        <View
+          style={[
+            styles.edge,
+            { height, backgroundColor: t.edge, top: depth.raised },
+            tone === 'neutral' && styles.neutralEdge,
+          ]}
+        />
+      )}
       <Animated.View
         style={[
           styles.face,
           { height, backgroundColor: t.bg },
+          disabled && { marginTop: depth.raised },
           size === 'sm' && styles.faceSm,
           tone === 'neutral' && styles.neutralFace,
           faceStyle,

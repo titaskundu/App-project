@@ -97,5 +97,6 @@ const styles = StyleSheet.create({
   },
   okKey: { backgroundColor: colors.brain, borderColor: colors.brainDark },
   keyPressed: { borderBottomWidth: 2, transform: [{ translateY: 3 }] },
-  keyDisabled: { opacity: 0.45 },
+  // Disabled keys sit flat (no thick lip), like a key that's pressed in.
+  keyDisabled: { opacity: 0.45, borderBottomWidth: 2, transform: [{ translateY: 3 }] },
 });

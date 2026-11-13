@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
-import { BackHandler, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { BackHandler, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -34,6 +34,8 @@ type Props = {
 // A plain slide (no spring), so the sheet doesn't wobble.
 const SLIDE_IN = SlideInDown.duration(260).easing(Easing.out(Easing.cubic));
 const SLIDE_OUT = SlideOutDown.duration(200).easing(Easing.in(Easing.cubic));
+/** Share of the screen the sheet takes when it has a Reels/Shorts mode switch. */
+const SHEET_HEIGHT = 0.86;
 
 /**
  * Bottom sheet with one app's controls. Changes are a draft until Save; closing with unsaved
@@ -55,6 +57,7 @@ export function LimitSheet({ pkg, onClose, onSaved }: Props) {
 
 function SheetContent({ pkg, onClose, onSaved }: { pkg: string; onClose: () => void; onSaved?: () => void }) {
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { apps, targets, today, shortFormApps, saveAppLimits, removeApp } = useBlocker();
   const name = appLabel(apps, pkg);
   const feed = shortFormApps[pkg];
@@ -104,9 +107,15 @@ function SheetContent({ pkg, onClose, onSaved }: { pkg: string; onClose: () => v
         <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close" onPress={requestClose} />
       </Animated.View>
 
-      <Animated.View entering={SLIDE_IN} exiting={SLIDE_OUT} style={[styles.sheet, { paddingBottom: insets.bottom + space.sm }]}>
+      {/* Apps with a Reels/Shorts mode get a fixed height, so switching Reels only / Whole app /
+          Both doesn't make the sheet jump: header, mode switch and buttons stay put, and only the
+          limit cards scroll between them. */}
+      <Animated.View
+        entering={SLIDE_IN}
+        exiting={SLIDE_OUT}
+        style={[styles.sheet, { paddingBottom: insets.bottom + space.sm }, feed ? { height: Math.round(windowHeight * SHEET_HEIGHT) } : null]}>
         <View style={styles.handle} />
-        <ScrollView contentContainerStyle={styles.content} bounces={false}>
+        <View style={styles.fixedTop}>
           <View style={styles.head}>
             <AppIcon pkg={pkg} label={name} size={52} />
             <View style={styles.flex}>
@@ -130,7 +139,9 @@ function SheetContent({ pkg, onClose, onSaved }: { pkg: string; onClose: () => v
               <ModeSwitch value={mode} feed={feed} onChange={setMode} />
             </View>
           ) : null}
+        </View>
 
+        <ScrollView style={feed ? styles.flex : null} contentContainerStyle={styles.scrollContent} bounces={false}>
           {statuses.map((s) => (
             <LimitBlock key={s.scope} status={s} name={name} feed={feed} onChange={(m) => setMinutes(s.scope, m)} />
           ))}
@@ -143,7 +154,9 @@ function SheetContent({ pkg, onClose, onSaved }: { pkg: string; onClose: () => v
               </AppText>
             </View>
           )}
+        </ScrollView>
 
+        <View style={styles.footer}>
           <ChunkyButton label={dirty ? 'Save' : 'Saved'} disabled={!dirty} onPress={save} />
 
           <Pressable
@@ -158,7 +171,7 @@ function SheetContent({ pkg, onClose, onSaved }: { pkg: string; onClose: () => v
               Stop blocking
             </AppText>
           </Pressable>
-        </ScrollView>
+        </View>
       </Animated.View>
 
       {confirming && (
@@ -273,7 +286,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderDark,
     marginTop: space.sm,
   },
-  content: { padding: space.md, gap: space.md },
+  fixedTop: { padding: space.md, paddingBottom: space.sm, gap: space.md },
+  scrollContent: { paddingHorizontal: space.md, paddingVertical: space.sm, gap: space.md },
+  footer: { paddingHorizontal: space.md, paddingTop: space.sm, gap: space.md },
   head: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   flex: { flex: 1 },
   noShrink: { flexShrink: 0 },

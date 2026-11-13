@@ -7,6 +7,7 @@ import { Chip } from '@/components/ui/Chip';
 import { ChunkyButton } from '@/components/ui/ChunkyButton';
 import { Screen } from '@/components/ui/Screen';
 import { useBrain } from '@/features/brain/store';
+import { CompanionHero } from '@/features/companion/components/CompanionHero';
 import { BANK_DAILY_CAP, PRACTICE_BANK_MINUTES, PRACTICE_PASS, PRACTICE_QUESTIONS } from '@/features/brain/toll';
 import { TodayAppsCard } from '@/features/blocker/components/TodayAppsCard';
 import { MUSCLE_PRACTICE_BANK_MINUTES } from '@/features/muscle/toll';
@@ -16,8 +17,9 @@ import { useLiveBlocker } from '@/features/blocker/useLiveBlocker';
 import { colors, radius, space } from '@/theme/tokens';
 
 /**
- * Home hub. "Today's apps" is live (Phase 1); Hours Reclaimed and Sparks are
- * placeholders until the economy (Phase 5) feeds real data.
+ * Home hub: a slim stats bar, the companion hero (Phase 6's 3D panda goes in its stage), then
+ * "Today's apps" and practice. Hours Reclaimed and Sparks are placeholders until the economy
+ * (Phase 5) feeds real data.
  */
 export default function HomeScreen() {
   useLiveBlocker();
@@ -30,25 +32,15 @@ export default function HomeScreen() {
 
   return (
     <Screen>
-      {/* Stat tiles */}
+      {/* Slim stats bar (icon + number, like a game's top bar) */}
       <View style={styles.stats}>
-        <StatTile icon="time" value="0h 0m" label="Reclaimed" color={colors.primary} soft={colors.primarySoft} />
-        <StatTile icon="flash" value="0" label="Sparks" color={colors.sparkDark} soft={colors.sparkSoft} />
-        <StatTile icon="wallet" value={`${banked}m`} label="Banked" color={colors.brainDark} soft={colors.brainSoft} />
+        <Stat icon="time" value="0h 0m" label="Hours reclaimed" color={colors.primary} />
+        <Stat icon="flash" value="0" label="Sparks" color={colors.spark} />
+        <Stat icon="wallet" value={`${banked}m`} label="Banked minutes" color={colors.brain} />
       </View>
 
-      {/* Companion: red panda arrives in Phase 6 */}
-      <View style={styles.companion}>
-        <View style={styles.mascot}>
-          <AppText variant="display">🐼</AppText>
-        </View>
-        <View style={styles.bubbleWrap}>
-          <View style={styles.bubbleTail} />
-          <View style={[styles.bubble, { borderColor: line.color }]}>
-            <AppText variant="bodyLg">{line.text}</AppText>
-          </View>
-        </View>
-      </View>
+      {/* Hero: the companion's stage (the 3D red panda drops in here in Phase 6) */}
+      <CompanionHero text={line.text} color={line.color} />
 
       {/* Live time used per blocked app */}
       <TodayAppsCard />
@@ -98,29 +90,23 @@ function useCompanionLine(banked: number): { text: string; color: string } {
   return { text: 'All within limits. A practice round banks minutes for later.', color: colors.brain };
 }
 
-function StatTile({
+/** One stat in the top bar: a colored icon and a bold number (its name is read out by screen readers). */
+function Stat({
   icon,
   value,
   label,
   color,
-  soft,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   value: string;
   label: string;
   color: string;
-  soft: string;
 }) {
   return (
-    <View style={styles.stat}>
-      <View style={[styles.statIcon, { backgroundColor: soft }]}>
-        <Ionicons name={icon} size={18} color={color} />
-      </View>
+    <View style={styles.stat} accessible accessibilityLabel={`${label}: ${value}`}>
+      <Ionicons name={icon} size={24} color={color} />
       <AppText variant="heading" numberOfLines={1}>
         {value}
-      </AppText>
-      <AppText variant="micro" uppercase color={colors.textMuted} numberOfLines={1} style={styles.noShrink}>
-        {label}
       </AppText>
     </View>
   );
@@ -197,60 +183,8 @@ function PracticeCard({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  noShrink: { flexShrink: 0 },
-  stats: { flexDirection: 'row', gap: space.sm },
-  stat: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-    paddingVertical: space.md,
-    paddingHorizontal: space.xs,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 2,
-    borderBottomWidth: 5,
-    borderColor: colors.border,
-  },
-  statIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 2,
-  },
-  companion: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  mascot: {
-    width: 96,
-    height: 96,
-    borderRadius: radius.full,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 2,
-    borderBottomWidth: 5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bubbleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  // Little triangle pointing at the mascot.
-  bubbleTail: {
-    width: 0,
-    height: 0,
-    borderTopWidth: 8,
-    borderBottomWidth: 8,
-    borderRightWidth: 10,
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
-    borderRightColor: colors.border,
-  },
-  bubble: {
-    flex: 1,
-    padding: space.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 2,
-    borderBottomWidth: 4,
-  },
+  stats: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: space.sm },
+  stat: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40 },
   sectionLabel: { marginTop: space.xs },
   practice: {
     gap: space.md,
@@ -260,7 +194,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 5,
   },
   practicePressed: { borderBottomWidth: 2, marginTop: 3 },
-  dimmed: { opacity: 0.55 },
+  // A disabled card sits flat (no thick lip), like a pressed one.
+  dimmed: { opacity: 0.55, borderBottomWidth: 2, marginTop: 3 },
   practiceTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   practiceIcon: {
     width: 56,
