@@ -66,6 +66,7 @@ export function ChunkyButton({
             styles.edge,
             { height, backgroundColor: t.edge, top: depth.raised },
             tone === 'neutral' && styles.neutralEdge,
+            tone === 'dangerOutline' && styles.dangerEdge,
           ]}
         />
       )}
@@ -76,6 +77,7 @@ export function ChunkyButton({
           disabled && { marginTop: depth.raised },
           size === 'sm' && styles.faceSm,
           tone === 'neutral' && styles.neutralFace,
+          tone === 'dangerOutline' && styles.dangerFace,
           faceStyle,
         ]}>
         {icon}
@@ -112,4 +114,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.border,
   },
+  dangerEdge: { borderWidth: 2, borderColor: colors.dangerSoft },
+  dangerFace: { borderWidth: 2, borderColor: colors.dangerSoft },
 });

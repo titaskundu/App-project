@@ -18,6 +18,8 @@ import { useLiveBlocker } from '@/features/blocker/useLiveBlocker';
 import { useMuscle } from '@/features/muscle/store';
 import { EXERCISE_ORDER, EXERCISE_TEXT } from '@/features/muscle/toll';
 import { useSync } from '@/features/sync/sync';
+import { Avatar } from '@/features/account/components/Avatar';
+import { useAccount } from '@/features/account/store';
 import { colors, radius, space } from '@/theme/tokens';
 
 const MAX_TOPIC_CHIPS = 3;
@@ -34,6 +36,7 @@ export default function SettingsScreen() {
   const brainAreas = useBrain((s) => s.areas);
   const checked = useMuscle((s) => s.checked);
   const sync = useSync();
+  const profile = useAccount((s) => s.profile);
 
   const levels = pkgs.map((p) => worstLevel(scopeStatuses(targets, today, p)));
   const over = levels.filter((l) => l === 'over').length;
@@ -51,6 +54,25 @@ export default function SettingsScreen() {
   return (
     <Screen>
       <AppText variant="title">Settings</AppText>
+
+      {profile && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Profile: ${profile.displayName}, @${profile.username}`}
+          onPress={() => router.push('/profile')}
+          style={({ pressed }) => [styles.row, styles.profile, pressed && styles.rowPressed]}>
+          <Avatar name={profile.displayName} size={56} />
+          <View style={styles.flex}>
+            <AppText variant="heading" numberOfLines={1}>
+              {profile.displayName}
+            </AppText>
+            <AppText variant="caption" color={colors.textMuted} numberOfLines={1}>
+              {`@${profile.username} · ${sync.provider === 'google' ? 'Google' : 'Email'} · ${sync.pending > 0 ? 'syncing soon' : 'auto-sync on'}`}
+            </AppText>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+        </Pressable>
+      )}
 
       <AccessibilityCard enabled={accessibilityOn} />
 
@@ -145,27 +167,6 @@ export default function SettingsScreen() {
         </View>
       </HubRow>
 
-      <HubRow
-        title="Account & data"
-        accent={colors.spark}
-        a11y={`Account and data: ${sync.isAnonymous ? 'not backed up yet' : 'backed up with Google'}`}
-        onPress={() => router.push('/account')}>
-        <View style={styles.inline}>
-          <Ionicons
-            name={!sync.configured ? 'phone-portrait' : sync.isAnonymous ? 'cloud-offline' : 'cloud-done'}
-            size={22}
-            color={sync.isAnonymous ? colors.textMuted : colors.success}
-          />
-          <View style={styles.flex}>
-            <AppText variant="bodyLg">
-              {!sync.configured ? 'Saved on this phone' : sync.isAnonymous ? 'Not backed up yet' : 'Backed up with Google'}
-            </AppText>
-            <AppText variant="caption" color={colors.textMuted} numberOfLines={1}>
-              {sync.isAnonymous ? 'Back up, export or delete your data' : (sync.email ?? 'Export or delete your data')}
-            </AppText>
-          </View>
-        </View>
-      </HubRow>
     </Screen>
   );
 }
@@ -214,6 +215,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   rowPressed: { borderBottomWidth: 2, marginTop: 3 },
+  profile: { flexDirection: 'row', alignItems: 'center' },
   rowHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   dot: { width: 8, height: 8, borderRadius: 4 },
   inline: { flexDirection: 'row', alignItems: 'center', gap: space.md },

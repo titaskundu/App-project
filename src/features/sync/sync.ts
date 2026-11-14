@@ -1,5 +1,4 @@
 import { randomUUID } from 'expo-crypto';
-import Storage from 'expo-sqlite/kv-store';
 import { AppState } from 'react-native';
 import { create } from 'zustand';
 
@@ -20,12 +19,22 @@ import { supabase } from './supabase';
  * Background sync. Everything is saved on the phone first; this only mirrors it to Supabase
  * when there's internet. Nothing here is awaited by a toll or a screen, and every failure is
  * swallowed and retried later, so the app behaves exactly the same offline.
+ *
+ * Uploads only run for a signed-in account that the auth gate has marked ready (profile done and
+ * any backup restored), so an empty phone can never overwrite an account's backup.
  */
 export type SyncStatus = {
   configured: boolean;
+  /** The saved login session has been read (false only for a moment at launch). */
+  sessionLoaded: boolean;
   userId: string | null;
+  /** Leftover anonymous session from Phase 4a (signed out by the auth gate). */
   isAnonymous: boolean;
   email: string | null;
+  /** How the user signs in: 'google' | 'email' (null when signed out). */
+  provider: string | null;
+  /** Name from Google, used to pre-fill the profile. */
+  fullName: string | null;
   pending: number;
   lastSyncAt: number | null;
   /** Last error message (for the account screen), cleared by the next good sync. */
@@ -34,9 +43,12 @@ export type SyncStatus = {
 
 export const useSync = create<SyncStatus>(() => ({
   configured: !!supabase,
+  sessionLoaded: !supabase,
   userId: null,
-  isAnonymous: true,
+  isAnonymous: false,
   email: null,
+  provider: null,
+  fullName: null,
   pending: outbox.pendingCount(),
   lastSyncAt: null,
   error: null,
@@ -45,21 +57,8 @@ export const useSync = create<SyncStatus>(() => ({
 let failures = 0;
 let lastFailureAt = 0;
 let flushing = false;
-/**
- * Set while the account is being switched or deleted, so nothing uploads to the wrong user.
- * Saved on the phone: if the app closes while the "Restore your backup?" question is open, it's
- * still on hold next launch, so this phone's (empty) data can't overwrite the backup.
- */
-const HOLD_KEY = 'mms-sync-hold';
-let paused = readHold();
-
-function readHold(): boolean {
-  try {
-    return Storage.getItemSync(HOLD_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
+/** Set by the auth gate once the signed-in account is ready (see the comment above). */
+let accountReady = false;
 
 function refreshPending() {
   useSync.setState({ pending: outbox.pendingCount() });
@@ -85,29 +84,32 @@ export function queueAnswer(a: AnswerRecord, mode: SessionMode): void {
 
 // ---- session ----------------------------------------------------------------------------------
 
-function applySession(user: { id: string; is_anonymous?: boolean; email?: string } | null | undefined) {
+type SessionUser = {
+  id: string;
+  is_anonymous?: boolean;
+  email?: string;
+  app_metadata?: { provider?: string };
+  user_metadata?: { full_name?: string; name?: string };
+};
+
+function applySession(user: SessionUser | null | undefined) {
   useSync.setState({
+    sessionLoaded: true,
     userId: user?.id ?? null,
-    isAnonymous: user ? user.is_anonymous !== false : true,
+    isAnonymous: user?.is_anonymous === true,
     email: user?.email || null,
+    provider: user?.app_metadata?.provider ?? null,
+    fullName: user?.user_metadata?.full_name || user?.user_metadata?.name || null,
   });
 }
 
-/** Makes sure there's a signed-in user (anonymous on first launch). False when offline. */
-export async function ensureSession(): Promise<boolean> {
+/** True when a (non-anonymous) user is signed in. Never creates an account. */
+export async function hasSession(): Promise<boolean> {
   if (!supabase) return false;
   try {
     const { data } = await supabase.auth.getSession();
-    if (data.session) {
-      applySession(data.session.user);
-      return true;
-    }
-    const { data: signed, error } = await supabase.auth.signInAnonymously();
-    if (error || !signed.user) throw error ?? new Error('No user');
-    applySession(signed.user);
-    return true;
-  } catch (e) {
-    useSync.setState({ error: e instanceof Error ? e.message : String(e) });
+    return !!data.session && data.session.user.is_anonymous !== true;
+  } catch {
     return false;
   }
 }
@@ -116,11 +118,11 @@ export async function ensureSession(): Promise<boolean> {
 
 /** Uploads queued rows. Safe to call any time; does nothing offline or while backing off. */
 export async function flush(force = false): Promise<void> {
-  if (!supabase || flushing || paused) return;
+  if (!supabase || flushing || !accountReady) return;
   if (!force && !canRetry(Date.now(), lastFailureAt, failures)) return;
   flushing = true;
   try {
-    if (!(await ensureSession())) throw new Error('Offline');
+    if (!(await hasSession())) throw new Error('Not signed in');
     for (const batch of batches(outbox.pending())) {
       const { error } = await supabase.from(batch.table).upsert(
         batch.items.map((i) => i.payload),
@@ -186,8 +188,9 @@ async function pushDirtySnapshots(): Promise<void> {
 let started = false;
 
 /**
- * Starts background sync once (from the root layout): signs in, uploads, and keeps the backup
- * fresh when the stores change. Also refreshes the login token only while the app is open.
+ * Starts background sync once (from the root layout): reads the saved session, uploads, and keeps
+ * the backup fresh when the stores change. Also refreshes the login token only while the app is
+ * open.
  */
 export function startSync(): void {
   if (started || !supabase) return;
@@ -195,6 +198,10 @@ export function startSync(): void {
   const client = supabase;
 
   client.auth.onAuthStateChange((_event, session) => applySession(session?.user));
+  client.auth
+    .getSession()
+    .then(({ data }) => applySession(data.session?.user))
+    .catch(() => useSync.setState({ sessionLoaded: true }));
 
   const onAppState = (s: string | null | undefined) => {
     if (s === 'active') {
@@ -217,20 +224,10 @@ export function startSync(): void {
   (['brain', 'muscle', 'blocker'] as const).forEach((k) => dirty.add(k));
 }
 
-/** Stops uploads while switching or deleting accounts (remembered across app restarts). */
-export function pauseSync(p: boolean): void {
-  paused = p;
-  try {
-    if (p) Storage.setItemSync(HOLD_KEY, '1');
-    else Storage.removeItemSync(HOLD_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-/** True while a restore decision is pending (see pauseSync). */
-export function syncOnHold(): boolean {
-  return paused;
+/** Called by the auth gate: true once the signed-in account is ready, false on sign-out. */
+export function setAccountReady(ready: boolean): void {
+  accountReady = ready;
+  if (ready) void flush(true);
 }
 
 /** Forget what was pushed, so the next sync re-uploads every snapshot (after an account change). */

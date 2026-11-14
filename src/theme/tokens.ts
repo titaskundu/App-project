@@ -110,6 +110,8 @@ export const tones = {
   spark: { bg: colors.spark, edge: colors.sparkDark, fg: colors.text },
   danger: { bg: colors.danger, edge: colors.dangerDark, fg: colors.textOnColor },
   neutral: { bg: colors.surface, edge: colors.border, fg: colors.primary },
+  // White button with red text, for destructive actions that open a confirmation.
+  dangerOutline: { bg: colors.surface, edge: colors.dangerSoft, fg: colors.danger },
 } as const;
 
 export type Tone = keyof typeof tones;

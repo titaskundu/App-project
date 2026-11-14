@@ -1,7 +1,7 @@
 # Mind-Muscle Sync — Build Plan (Android first, Play Store launch at the lowest cost)
 
 ## Context
-Mind-Muscle Sync blocks distracting apps (Instagram, YouTube, etc.) once you've used them past your daily limit. To get more time, you pay a "toll": a quick round of math (Brain) or exercises checked by the camera (Muscle). Tolls earn Sparks, which feed a red-panda companion, a shop and a stats screen.
+Mind-Muscle Sync blocks distracting apps (Instagram, YouTube, etc.) once you've used them past your daily limit. To get more time, you pay a "toll": a quick round of math (Brain) or exercises checked by the camera (Muscle). Tolls earn **Bamboo**, which you feed to a red-panda companion in exchange for browsing time; **Gems** (bought with real money) buy Bamboo and premium cosmetics in the shop.
 
 The repo is empty apart from the Stitch reference export (unpacked to `stitch_ref/`). Decisions made with you:
 - Android only at first, published on the Play Store, with the lowest possible running cost.
@@ -10,9 +10,9 @@ The repo is empty apart from the Stitch reference export (unpacked to `stitch_re
 - Brain Mode covers **5 interest areas**: Mental Math, Logic & Patterns, General Knowledge (global), Coding (language-neutral) and Words & Vocabulary. At setup a questionnaire asks which areas interest you, and block-screen questions come only from the areas you picked. You can change them later in Settings.
 - Questions are AI-made. Offline, Brain Mode falls back to stored AI questions, then to the starter pack bundled with the app (and, for math and logic, problems built on the phone).
 - Muscle Mode: squats, jumping jacks and one low-impact move, with the phone propped facing you.
-- Each toll unlocks more time, and each repeat that day gets harder.
-- Skips: a few free ones a day, plus Time Passes (bought with Sparks or about ₹10–20 each). All skips share one daily cap of 2 passes on top of the free skips.
-- New look: indigo #4F46E5, coral #FF6B57 (Muscle), teal #14B8A6 (Brain), gold #F5B700 (Sparks), warm cream #FAF7F2. Red panda mascot.
+- Each toll earns Bamboo, and each repeat that day gets harder. Bamboo buys time (Phase 5).
+- ~~Skips + Time Passes with one shared daily cap~~ **Replaced 2026-11-14 by the Bamboo/Gems economy (Phase 5): no daily cap; extra time is bought with Bamboo, which is earned or bought with Gems.**
+- New look: indigo #4F46E5, coral #FF6B57 (Muscle), teal #14B8A6 (Brain), gold #F5B700 (Sparks; Bamboo/Gem colors chosen in Phase 5), warm cream #FAF7F2. Red panda mascot.
 - Keep Duolingo's simple, chunky, bouncy feel, but not its colors or mascot.
 
 **Why this order:** the blocking feature is the riskiest part (Android limits plus Google's approval), so it's built and tested first, before any polish.
@@ -168,15 +168,55 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 - **Remote Reels/Shorts detection rules:** the app downloads the latest rules list from Supabase, so detection can be fixed after Instagram/YouTube/Facebook updates without a new app release.
 - The app syncs events when online and works fully offline.
 
-### Phase 5 — Rewards & shop
-- **Markets (decided 2026-11-12): India and Germany/EU both at launch.** Play sets local prices per country: ₹ in India (₹10–20 Time Passes), € in the EU (about €0.49–0.99); plan both price tables. German-language text later.
-- Sparks (bonuses for speed and good form), Toll Complete screen, Time Pass (bought with Sparks or paid through Play Billing), one shared daily cap, avatar wardrobe.
-- Sunday Boss: a combined squats + algebra challenge that drops rare cosmetics. It **does not** lock your weekend, it's a bonus. It appears in Home's Practice section on Sundays.
-- Banked minutes from practice tolls: daily bank cap, spent automatically when a blocked app hits its limit, counted against the shared daily cap rules.
-- Home: Monday **weekly recap card**.
+### Phase 5 — Economy: Bamboo, Gems, shop (plan agreed 2026-11-14, build after 4b)
+Replaces Sparks, Time Passes, the shared daily cap and banked minutes. All numbers below are **starting values to tune** while building.
+
+**Two currencies**
+- **Bamboo** 🎋 = the time currency. Earned by tolls, practice and idle farming; also bought with Gems. Lives **on the phone** (earned and spent offline, synced through the outbox like toll events). Cheating it only cheats yourself.
+- **Gems** 💎 = the premium currency. Bought with real money (Play Billing via RevenueCat; ₹ and € price tables) or earned from rare milestones. Lives **on the server** (Supabase ledger, purchases verified by a RevenueCat webhook → Edge Function). Gems → Bamboo and Gem shop purchases need internet; earning and spending Bamboo never does.
+- One Bamboo number in the UI, but **two kinds inside**: 🧠 Brain Bamboo (only from Brain tolls/practice) and 💪 Muscle Bamboo (only from Muscle tolls/practice). Bamboo bought with Gems or from idle farming is **neutral** (counts as time, never changes the panda's look).
+- Simple rate for people to reason about: **1 Bamboo ≈ 1 minute**.
+
+**Earning Bamboo**
+- Blocker toll pass: 10 Bamboo (+ Brain speed bonus / Muscle form bonus, the rules that give extra minutes today). Repeats that day still get harder (bigger tolls), so time costs more effort as the day goes on.
+- Practice tolls (Home → Brain / Muscle): earn the same way, **no daily cap** (user's choice).
+- **Idle farming:**
+  - *Live tick:* while the phone is awake and the blocked apps stay closed, a pile grows slowly (e.g. 1 Bamboo per 20 min). Screen-off time doesn't count, so sleeping isn't farming. Collect it by opening the app; the uncollected pile has a cap (e.g. 30), so you come back.
+  - *End-of-day bonus (midnight):* unused minutes under your base limits become a Bamboo bonus (e.g. 1 per 5 unused minutes).
+  - *Gem milestones:* under-limit day streaks, e.g. 7 / 30 / 100 days → 5 / 20 / 50 Gems, plus a few welcome Gems to try the shop. (The user plans more Gem sources for later updates.)
+
+**Spending Bamboo on time ("feeding the panda")**
+- **No daily cap** (user's decision): if you have the Bamboo, you can buy time. Effort or money is the limit.
+- From the blocker: pass the toll → the earned Bamboo is **fed automatically** for the standard 10 min and the app reopens. The result screen offers "Feed more: +10 min for 10 🎋" if you have a pile. If you already have enough Bamboo, the popup/Toll screen offers "Feed 10 🎋 → +10 min" before asking for a toll (replaces "Use banked minutes").
+- The math is done for you (e.g. "Use 25 🎋 for 25 min").
+- Spending takes Brain and Muscle Bamboo **in proportion to what you hold**, so the look follows how you earn.
+
+**Limits after setup**
+- At setup the user picks apps and limits once, with a clear warning that changing them later costs Bamboo.
+- **Free:** lowering a limit, adding an app, and any change in the first 7 days after setup (to fix a bad first guess).
+- **Paid:** raising a limit (per +15 min step) or removing an app, with a price that **rises with each paid change in the same week** (e.g. 30 → 60 → 120 🎋), reset weekly.
+
+**Shop**
+- Panda clothes, accessories, profile banners and other cosmetics. **Basics cost Bamboo, premium items cost Gems.** Bamboo spent in the shop is not "fed", so it doesn't change the look.
+- Gem packs (₹/€) and Gems → Bamboo bundles.
+- Sunday Boss (combined squats + algebra, bonus only, never locks the weekend) drops rare cosmetics or Bamboo.
+- **EU rules:** show the real-money price next to Gem prices, no paid random items (loot boxes), clear purchase confirmations. Check India/EU consumer rules again in Phase 7.
+
+**Panda look (drawn with the mascot in Phase 6; data collected from Phase 5)**
+- *Style* = share of Brain vs Muscle Bamboo **fed over the last 30 days**: mostly Brain → meditating sage; leaning Brain → bookish/brainy; even → balanced zen (yin-yang); leaning Muscle → sporty; mostly Muscle → muscular. *Level* = total Bamboo ever fed (visible growth tiers).
+- *Mood* = **today's usage vs base limits**, fresh at midnight: under all limits → proud, themed pose; bought extra time today → full/sleepy; 3+ extra chunks bought today → grumpy, imbalanced pose (the themed look is hidden until tomorrow).
+
+**Build notes**
+- New `src/features/economy/`: pure, unit-tested rules (earn amounts, proportional spend, limit-change pricing, idle tick + midnight bonus, streaks, look/mood from the ledger) + a local ledger (events with phone-made uuids → outbox → Supabase).
+- Native: the idle tick needs "blocked apps closed + screen on" time, which `BlockerService` already sees; store it in `BlockerStore` next to daily usage.
+- Supabase: `bamboo_events` (mirror of the phone ledger), `gem_ledger` + `owned_items` (server is the source of truth), RPCs `buy_bamboo(gems)` / `buy_item(id)`; a RevenueCat webhook Edge Function credits Gems.
+- Existing users: banked minutes → Bamboo 1:1.
+- Toll Complete screen shows Bamboo earned (with the 🧠/💪 split) and what was fed.
+- Home: Hours Reclaimed + Bamboo + Gems in the stats bar; Monday weekly recap card.
+- **Open for when we build it:** Bamboo and Gem colors (show the user swatches); exact numbers; whether free daily skips survive (probably not, since Bamboo replaces them).
 
 ### Phase 6 — Mascot, onboarding, stats, polish
-- Red panda: AI-generated 3D-style images in a fixed pose for each state (brainy/athletic/zen), with outfits as aligned layers on top. Idle float and tap-bounce animations.
+- Red panda: AI-generated 3D-style images in a fixed pose for each state, with outfits as aligned layers on top. Idle float and tap-bounce animations. States follow the Phase 5 economy: a style from the Brain/Muscle Bamboo mix (sage → brainy → zen → sporty → muscular), growth tiers from total Bamboo fed, and moods from today's usage (proud / full / grumpy-imbalanced).
 - Stats: skill radar (one axis per area you picked, with subskills on tap), coach tip, form score, weekly volume, 30-day heatmap, Hours Reclaimed.
 - Full onboarding and permission flow, sounds and vibration, empty states.
 - Home: **reactive mascot** (moods + speech bubble driven by limits, tolls and time of day) and the **reclaimed-time translator**.
@@ -222,6 +262,17 @@ Goal: count and limit only short-video feeds, so the rest of the app (DMs, feed,
 ---
 
 ## Current status (2026-11-08)
+**⏰ Reminder (2026-11-14): the user's economy plan (Bamboo / Gems / shop / panda look) is written into Phase 5. Build it after Phase 4b; remind the user when 4b is done.**
+
+**Phase 4a.2 — Mandatory accounts, sign-up / log-in, Profile (2026-11-14): 🟡 built and phone-tested with Google; email sign-up waits for the Brevo + Supabase email setup.**
+- No anonymous use any more: welcome (panda hero) → Google or email (6-digit code → password) → complete profile (name, unique username with a live check, date of birth) → app. "I already have an account" = email + password, forgot password by code. Signing up with an email that already has an account logs straight in.
+- Under 16 → "parent mode is coming" screen; the account is deleted and sign-up locks for 24 h on that phone. 16+ is enforced by the database too.
+- Signed out: blocking keeps working; "Pay toll" goes to welcome and opens the toll after login. First login on a phone restores the backup automatically.
+- Settings: profile card → Profile screen (details, auto-sync status, change password for email users, camera consent, export, delete account, sign out). Sign-out and delete are pop-ups (`ConfirmDialog`; delete is red).
+- Database: `supabase/migrations/20261114000000_profiles.sql` pushed (profiles + RLS + `username_available`; old transfer pieces dropped). Security check 20/20.
+- Checks: tsc + eslint clean, 114 Jest tests.
+- **Left to do:** the user sets up Brevo SMTP and the Supabase settings (custom SMTP, anonymous sign-ins OFF, confirm email ON, 6-digit OTP, min password 8, email templates showing `{{ .Token }}`); then test email sign-up, log-in, forgot password and under-16 with a test address; release build test.
+
 **Phase 4a — Accounts, sync and data controls (2026-11-12): 🟢 phone-tested (Galaxy S23); awaiting the user's review.**
 - Setup done by the user: Supabase project `mind-muscle-sync` (EU Ireland, eu-west-1; anonymous sign-ins + manual linking + Google provider on), Google Cloud OAuth (Android client with the debug SHA-1, Web client). Keys in `.env.local`. Migration pushed with the CLI (`npx supabase db push --remote`); read-only checks with `npx supabase db query --remote --read-only`.
 - Security check (scratch script, two throwaway anonymous users): 26/26 passed (no cross-user read/update/delete/insert, nothing for signed-out callers, fake/reused transfer tickets rejected, transfer moves rows and deletes the anonymous user).
